@@ -992,6 +992,23 @@ function drawCanvas(canvas, img, lm, m) {
     dotLabel(q.lTemple, 'CHEEK', '#9b8dff'); dotLabel(q.rTemple, 'CHEEK', '#9b8dff');
     dotLabel(q.lJaw, 'JAW', '#e05252');      dotLabel(q.rJaw, 'JAW', '#e05252');
     dotLabel(q.lChin, 'CHIN', CHIN_COL);     dotLabel(q.rChin, 'CHIN', CHIN_COL);
+    // Mouth corners (×2)
+    drawDot(q.lMouth, '#f5a623'); drawDot(q.rMouth, '#f5a623');
+    dotLabel(q.lMouth, 'MOUTH', '#f5a623'); dotLabel(q.rMouth, 'MOUTH', '#f5a623');
+    // Mouth width bracket
+    const mouthTop = s((q.lMouth.y + q.rMouth.y) / 2) - 30;
+    ctx.save();
+    ctx.strokeStyle = '#f5a623'; ctx.fillStyle = '#f5a623';
+    ctx.lineWidth = 1; ctx.globalAlpha = 0.7;
+    ctx.beginPath();
+    ctx.moveTo(s(q.lMouth.x), mouthTop); ctx.lineTo(s(q.lMouth.x), mouthTop + 6);
+    ctx.moveTo(s(q.lMouth.x), mouthTop + 3); ctx.lineTo(s(q.rMouth.x), mouthTop + 3);
+    ctx.moveTo(s(q.rMouth.x), mouthTop); ctx.lineTo(s(q.rMouth.x), mouthTop + 6);
+    ctx.stroke();
+    ctx.textAlign = 'center';
+    ctx.font = `bold ${Math.max(8, Math.round(8 * sc))}px -apple-system, sans-serif`;
+    ctx.fillText(`MOUTH`, (s(q.lMouth.x) + s(q.rMouth.x)) / 2, mouthTop - 4);
+    ctx.restore();
   }
 
   // ── Legend ───────────────────────────────────────────────────
