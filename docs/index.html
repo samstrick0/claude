@@ -411,6 +411,16 @@ const DRAGGABLE = {
   noseTip: L.NOSE_TIP,
 };
 
+// Which toggle group each draggable point belongs to. Points whose
+// group is hidden are neither drawn nor grabbable.
+const POINT_GROUP = {
+  trich: 'thirds', glab: 'thirds', subnas: 'thirds', ment: 'thirds',
+  ulip:  'thirds', llip:  'thirds',
+  leIn:  'eyes',   leOut: 'eyes',  reIn:  'eyes',   reOut: 'eyes',
+  lbPk:  'brows',  rbPk:  'brows',
+  lAlar: 'alar',   rAlar: 'alar',  noseTip: 'alar',
+};
+
 // ════════════════════════════════════════════════════════════════
 //  UI
 // ════════════════════════════════════════════════════════════════
@@ -868,24 +878,25 @@ function drawCanvas(canvas, img, lm, m) {
   }
   } // end jaw
 
-  // ── Landmark dots ────────────────────────────────────────────
-  const dots = {
-    '#3fbf72': [q.glab, q.subnas, q.ment, q.ulip, q.llip,
-                q.leIn, q.leOut, q.reIn, q.reOut,
-                q.lbPk, q.rbPk, q.lAlar, q.rAlar, q.noseTip],
-    '#f0a030': [q.trich],
-    '#9b8dff': [q.lTemple, q.rTemple],  // bizygomatic
-    '#e05252': [q.lJaw, q.rJaw],         // jaw angles
+  // ── Landmark dots (only for visible groups) ──────────────────
+  const drawDot = (pt, col) => {
+    if (!pt) return;
+    ctx.save();
+    ctx.fillStyle = col; ctx.globalAlpha = 0.9;
+    ctx.beginPath(); ctx.arc(s(pt.x), s(pt.y), Math.max(3, 3 * sc), 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
   };
-  Object.entries(dots).forEach(([col, pts]) => {
-    pts.forEach(pt => {
-      if (!pt) return;
-      ctx.save();
-      ctx.fillStyle = col; ctx.globalAlpha = 0.9;
-      ctx.beginPath(); ctx.arc(s(pt.x), s(pt.y), Math.max(3, 3 * sc), 0, Math.PI * 2); ctx.fill();
-      ctx.restore();
-    });
+  // Draggable landmark dots — hidden when their group is toggled off
+  Object.keys(DRAGGABLE).forEach(key => {
+    const grp = POINT_GROUP[key];
+    if (grp && !showMeasurements[grp]) return;
+    drawDot(q[key], key === 'trich' ? '#f0a030' : '#3fbf72');
   });
+  // Bizygomatic / jaw estimated dots — part of the Jaw group
+  if (showMeasurements.jaw) {
+    drawDot(q.lTemple, '#9b8dff'); drawDot(q.rTemple, '#9b8dff');
+    drawDot(q.lJaw, '#e05252');    drawDot(q.rJaw, '#e05252');
+  }
 
   // ── Legend ───────────────────────────────────────────────────
   const legY = dH - 50;
@@ -1463,6 +1474,8 @@ function nearestDraggable(cx, cy) {
   const HIT = 28;
   let best = null, bestD = Infinity;
   for (const [key, idx] of Object.entries(DRAGGABLE)) {
+    const grp = POINT_GROUP[key];
+    if (grp && !showMeasurements[grp]) continue;  // skip hidden groups
     const pt = currentLm[idx];
     const d  = Math.hypot(cx - pt.x * currentSc, cy - pt.y * currentSc);
     if (d < HIT && d < bestD) { bestD = d; best = key; }
