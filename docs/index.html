@@ -647,8 +647,7 @@ function calcMetrics(lm, W, H) {
   m.chinHRatio = m.chinH / m.lowerPx;  // fraction of lower third; 0.45–0.55 fem
 
   // ── Lip proportions (enhanced) ──────────────────────────────────
-  const mouthW = dx(p(lm, L.L_MOUTH), p(lm, L.R_MOUTH));
-  m.mouthWAlarR = mouthW / m.alarW;  // ideal 1.3–1.5
+  m.mouthWAlarR = mouthW / m.alarW;  // ideal 1.3–1.5 (mouthW computed above)
 
   const lipH = m.upperVerm + m.lowerVerm;
   m.lipHeightRatio = lipH / m.lowerPx;  // 18–22% fem of lower third
