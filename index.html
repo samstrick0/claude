@@ -1,0 +1,1069 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Morphometric Analyzer</title>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh@0.4/face_mesh.js" crossorigin="anonymous"></script>
+<style>
+/* ── Design tokens ────────────────────────────────────────────── */
+:root {
+  --bg:       #09090f;
+  --s1:       #111119;   /* card surface */
+  --s2:       #17171f;   /* card header */
+  --border:   #252535;
+  --teal:     #3ecfb8;   /* primary accent */
+  --violet:   #9b8dff;   /* secondary */
+  --amber:    #f0a030;   /* warning / estimated */
+  --green:    #3fbf72;   /* ok */
+  --red:      #e05252;   /* off / error */
+  --text:     #dde0ec;
+  --text2:    #7a7a9a;
+  --mono:     'SF Mono', 'Menlo', 'Courier New', monospace;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+html, body { height: 100%; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+}
+
+/* ── Screen management ────────────────────────────────────────── */
+.screen { display: none; }
+#screen-upload.active     { display: flex; }
+#screen-processing.active { display: flex; }
+#screen-results.active    { display: flex; }
+
+/* ── UPLOAD SCREEN ────────────────────────────────────────────── */
+#screen-upload {
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: 32px 20px;
+  gap: 28px;
+}
+
+.wordmark {
+  text-align: center;
+}
+.wordmark h1 {
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--teal);
+}
+.wordmark p {
+  margin-top: 6px;
+  font-size: 13px;
+  color: var(--text2);
+  line-height: 1.6;
+  max-width: 260px;
+}
+
+.drop-zone {
+  width: 100%;
+  max-width: 340px;
+  background: var(--s1);
+  border: 1.5px dashed var(--border);
+  border-radius: 20px;
+  padding: 52px 24px;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color .15s, background .15s;
+  position: relative;
+}
+.drop-zone:active {
+  border-color: var(--teal);
+  background: var(--s2);
+}
+.drop-icon { font-size: 44px; display: block; margin-bottom: 14px; }
+.drop-zone h2 { font-size: 17px; font-weight: 600; margin-bottom: 6px; }
+.drop-zone p  { font-size: 13px; color: var(--text2); line-height: 1.5; }
+#file-input { display: none; }
+
+.info-card {
+  width: 100%;
+  max-width: 340px;
+  background: var(--s1);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 14px 16px;
+  font-size: 12px;
+  color: var(--text2);
+  line-height: 1.7;
+}
+.info-card strong { color: var(--amber); font-weight: 600; }
+
+/* ── PROCESSING SCREEN ────────────────────────────────────────── */
+#screen-processing {
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  gap: 18px;
+}
+.ring {
+  width: 52px; height: 52px;
+  border: 3px solid var(--border);
+  border-top-color: var(--teal);
+  border-radius: 50%;
+  animation: spin .75s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.proc-label  { font-size: 15px; color: var(--text2); }
+#proc-step   { font-size: 12px; color: var(--teal); font-family: var(--mono); letter-spacing: 0.04em; }
+
+/* ── RESULTS SCREEN ───────────────────────────────────────────── */
+#screen-results {
+  flex-direction: column;
+  min-height: 100vh;
+  padding-bottom: 48px;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  background: var(--s1);
+  border-bottom: 1px solid var(--border);
+  position: sticky; top: 0; z-index: 20;
+}
+.topbar-title { font-size: 15px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--teal); }
+.btn {
+  background: var(--s2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 7px 14px;
+  font-size: 13px;
+  cursor: pointer;
+  font-family: inherit;
+}
+.btn:active { background: var(--border); }
+
+#result-canvas { width: 100%; display: block; }
+
+.rpt { margin: 0 12px; margin-top: 14px; }
+
+.card {
+  background: var(--s1);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  overflow: hidden;
+  margin-bottom: 14px;
+}
+.card-head {
+  background: var(--s2);
+  padding: 9px 14px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text2);
+  border-bottom: 1px solid var(--border);
+}
+.mrow {
+  display: flex;
+  align-items: flex-start;
+  padding: 10px 14px;
+  gap: 8px;
+  border-bottom: 1px solid var(--border);
+}
+.mrow:last-child { border-bottom: none; }
+.mname {
+  flex: 1;
+  font-size: 13px;
+  color: var(--text);
+  line-height: 1.4;
+}
+.mval {
+  font-size: 13px;
+  font-weight: 700;
+  font-family: var(--mono);
+  color: var(--teal);
+  white-space: nowrap;
+}
+.mcanon {
+  font-size: 11px;
+  color: var(--text2);
+  font-family: var(--mono);
+  white-space: nowrap;
+}
+.sub {
+  padding: 0 14px 10px;
+  font-size: 11px;
+  color: var(--text2);
+  line-height: 1.6;
+  border-bottom: 1px solid var(--border);
+}
+.sub:last-child { border-bottom: none; }
+
+.badge {
+  display: inline-block;
+  font-size: 10px;
+  padding: 2px 7px;
+  border-radius: 5px;
+  font-weight: 700;
+  white-space: nowrap;
+  flex-shrink: 0;
+  align-self: center;
+}
+.ok   { background: rgba(63,191,114,.15); color: var(--green); }
+.warn { background: rgba(240,160,48,.15); color: var(--amber); }
+.off  { background: rgba(224,82,82,.15);  color: var(--red);   }
+.info { background: rgba(62,207,184,.12); color: var(--teal);  }
+.dim  { background: rgba(122,122,154,.12); color: var(--text2); }
+
+.conf-row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 14px;
+  font-size: 11px;
+  color: var(--text2);
+  border-bottom: 1px solid var(--border);
+}
+.conf-row:last-child { border-bottom: none; }
+.dot {
+  width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+}
+.dot-g { background: var(--green); }
+.dot-a { background: var(--amber); }
+.dot-r { background: var(--red);   }
+
+.pnote {
+  padding: 12px 14px;
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--text);
+  border-bottom: 1px solid var(--border);
+}
+.pnote:last-child { border-bottom: none; }
+.pnlabel { font-weight: 700; margin-right: 4px; }
+
+.err-box {
+  margin: 24px 16px;
+  padding: 16px;
+  background: rgba(224,82,82,.1);
+  border: 1px solid rgba(224,82,82,.3);
+  border-radius: 12px;
+  font-size: 14px;
+  color: var(--red);
+  line-height: 1.6;
+}
+.retry-btn {
+  display: block;
+  margin: 12px auto;
+  background: var(--s2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 10px;
+  padding: 12px 28px;
+  font-size: 15px;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.method-note {
+  font-size: 11px;
+  color: var(--text2);
+  line-height: 1.7;
+  padding: 12px 14px;
+}
+</style>
+</head>
+<body>
+
+<!-- ══ SCREEN 1 — UPLOAD ══════════════════════════════════════════ -->
+<div id="screen-upload" class="screen">
+  <div class="wordmark">
+    <h1>Morphometric</h1>
+    <p>478-point landmark analysis · runs on-device · no data sent</p>
+  </div>
+
+  <div class="drop-zone" onclick="document.getElementById('file-input').click()">
+    <span class="drop-icon">📷</span>
+    <h2>Choose a photo</h2>
+    <p>Camera or library · front-facing · neutral expression · good lighting</p>
+  </div>
+  <input type="file" id="file-input" accept="image/*">
+
+  <div class="info-card">
+    <strong>First use only:</strong> downloads the face mesh model (~10 MB) — requires Wi-Fi or cellular.
+    After that, works offline.<br><br>
+    <strong>Best results:</strong> hair pulled back so the full hairline is visible, even light, camera at eye level.
+  </div>
+</div>
+
+<!-- ══ SCREEN 2 — PROCESSING ═════════════════════════════════════ -->
+<div id="screen-processing" class="screen">
+  <div class="ring"></div>
+  <div class="proc-label">Analyzing…</div>
+  <div id="proc-step">Loading model</div>
+</div>
+
+<!-- ══ SCREEN 3 — RESULTS ════════════════════════════════════════ -->
+<div id="screen-results" class="screen">
+  <div class="topbar">
+    <button class="btn" onclick="goBack()">← New</button>
+    <span class="topbar-title">Analysis</span>
+    <button class="btn" onclick="saveImg()">Save ↗</button>
+  </div>
+
+  <canvas id="result-canvas"></canvas>
+  <div id="rpt" class="rpt"></div>
+</div>
+
+<script>
+// ════════════════════════════════════════════════════════════════
+//  LANDMARK INDEX MAP  (MediaPipe 478-pt face mesh)
+// ════════════════════════════════════════════════════════════════
+const L = {
+  TRICHION:    10,  // top of forehead (approximation — flagged low-conf)
+  GLABELLA:     9,  // between brows
+  NASION:       6,  // nose bridge top
+  NOSE_TIP:     1,  // pronasale
+  SUBNASALE:    2,  // below nose tip / columella base
+  UPPER_LIP:    0,  // labrale superius
+  STOMION_U:   13,  // inside upper lip
+  STOMION_D:   14,  // inside lower lip
+  LOWER_LIP:   17,  // labrale inferius
+  MENTON:     152,  // chin bottom
+
+  LE_OUT:      33,  // left outer canthus  (viewer's right)
+  LE_IN:      133,  // left inner canthus
+  LE_TOP:     159,  // left upper lid center
+  LE_BOT:     145,  // left lower lid center
+  RE_IN:      362,  // right inner canthus
+  RE_OUT:     263,  // right outer canthus
+  RE_TOP:     386,  // right upper lid center
+  RE_BOT:     374,  // right lower lid center
+
+  LB_IN:       55,  // left brow inner
+  LB_PEAK:    105,  // left brow peak
+  LB_OUT:      46,  // left brow outer
+  RB_IN:      285,  // right brow inner
+  RB_PEAK:    334,  // right brow peak
+  RB_OUT:     276,  // right brow outer
+
+  L_ALAR:     129,  // left alar base
+  R_ALAR:     358,  // right alar base
+
+  L_MOUTH:     61,  // left mouth corner
+  R_MOUTH:    291,  // right mouth corner
+};
+
+// ════════════════════════════════════════════════════════════════
+//  STATE
+// ════════════════════════════════════════════════════════════════
+let faceMesh   = null;
+let meshReady  = false;
+let initResolve = null;
+let isIniting  = false;
+let pendingImg = null;
+
+// ════════════════════════════════════════════════════════════════
+//  UI
+// ════════════════════════════════════════════════════════════════
+function show(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+function step(msg) { document.getElementById('proc-step').textContent = msg; }
+function goBack()  { show('screen-upload'); }
+
+// ════════════════════════════════════════════════════════════════
+//  MEDIAPIPE INIT
+// ════════════════════════════════════════════════════════════════
+function initMesh() {
+  return new Promise((resolve, reject) => {
+    try {
+      faceMesh = new FaceMesh({
+        locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh@0.4/${f}`
+      });
+      faceMesh.setOptions({
+        maxNumFaces: 1,
+        refineLandmarks: true,
+        minDetectionConfidence: 0.5,
+        minTrackingConfidence: 0.5,
+      });
+      faceMesh.onResults(onResults);
+
+      // Fire a blank frame to pre-load WASM; we ignore its result via isIniting flag
+      isIniting = true;
+      initResolve = resolve;
+      const dummy = document.createElement('canvas');
+      dummy.width = dummy.height = 1;
+      faceMesh.send({ image: dummy }).catch(reject);
+    } catch(e) { reject(e); }
+  });
+}
+
+// ════════════════════════════════════════════════════════════════
+//  FILE HANDLER
+// ════════════════════════════════════════════════════════════════
+document.getElementById('file-input').addEventListener('change', async e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  e.target.value = '';
+
+  show('screen-processing');
+  step('Loading image…');
+
+  // Load image
+  const url = URL.createObjectURL(file);
+  const img = new Image();
+  img.src = url;
+  await new Promise(r => { img.onload = r; });
+  pendingImg = img;
+
+  // Init if needed
+  if (!meshReady) {
+    step('Downloading face model (~10 MB)…');
+    try { await initMesh(); } catch(err) {
+      showErr('Could not load MediaPipe model. Check your internet connection and try again.<br><br>Detail: ' + err);
+      return;
+    }
+  }
+
+  step('Detecting 478 landmarks…');
+  try {
+    await faceMesh.send({ image: img });
+  } catch(err) {
+    showErr('Detection error: ' + err.message);
+  }
+});
+
+// ════════════════════════════════════════════════════════════════
+//  RESULTS CALLBACK
+// ════════════════════════════════════════════════════════════════
+function onResults(results) {
+  // Absorb the dummy init frame
+  if (isIniting) {
+    isIniting  = false;
+    meshReady  = true;
+    if (initResolve) { initResolve(); initResolve = null; }
+    return;
+  }
+
+  if (!results.multiFaceLandmarks || results.multiFaceLandmarks.length === 0) {
+    showErr('No face detected. Try a clearer front-facing photo with good lighting.');
+    return;
+  }
+
+  const raw = results.multiFaceLandmarks[0];
+  const img = pendingImg;
+  const W   = img.naturalWidth;
+  const H   = img.naturalHeight;
+
+  // Denormalize to pixel coords
+  const lm = raw.map(p => ({ x: p.x * W, y: p.y * H, z: p.z }));
+
+  step('Computing metrics…');
+  const metrics = calcMetrics(lm, W, H);
+
+  step('Rendering…');
+  const canvas = document.getElementById('result-canvas');
+  drawCanvas(canvas, img, lm, metrics);
+  document.getElementById('rpt').innerHTML = buildReport(metrics);
+
+  show('screen-results');
+}
+
+function showErr(msg) {
+  show('screen-results');
+  document.getElementById('rpt').innerHTML =
+    `<div class="err-box">${msg}</div>
+     <button class="retry-btn" onclick="goBack()">Try Another Photo</button>`;
+}
+
+// ════════════════════════════════════════════════════════════════
+//  MATH HELPERS
+// ════════════════════════════════════════════════════════════════
+const p  = (lm, i)   => lm[i];
+const dx = (a, b)    => Math.sqrt((a.x-b.x)**2 + (a.y-b.y)**2);
+const mid = (a, b)   => ({ x: (a.x+b.x)/2, y: (a.y+b.y)/2 });
+const ang = (a, b)   => Math.atan2(-(b.y-a.y), b.x-a.x) * 180 / Math.PI;
+
+// ════════════════════════════════════════════════════════════════
+//  METRIC CALCULATIONS
+// ════════════════════════════════════════════════════════════════
+function calcMetrics(lm, W, H) {
+  const m = {};
+
+  // ── Facial thirds ──────────────────────────────────────────────
+  const trich  = p(lm, L.TRICHION);
+  const glab   = p(lm, L.GLABELLA);
+  const subnas = p(lm, L.SUBNASALE);
+  const ment   = p(lm, L.MENTON);
+
+  m.upperPx  = glab.y   - trich.y;
+  m.midPx    = subnas.y - glab.y;
+  m.lowerPx  = ment.y   - subnas.y;
+  m.totalPx  = ment.y   - trich.y;
+
+  m.upperPct  = m.upperPx  / m.totalPx * 100;
+  m.midPct    = m.midPx    / m.totalPx * 100;
+  m.lowerPct  = m.lowerPx  / m.totalPx * 100;
+
+  // ── Eyes ───────────────────────────────────────────────────────
+  const leOut = p(lm, L.LE_OUT), leIn = p(lm, L.LE_IN);
+  const leTop = p(lm, L.LE_TOP), leBot = p(lm, L.LE_BOT);
+  const reIn  = p(lm, L.RE_IN),  reOut = p(lm, L.RE_OUT);
+  const reTop = p(lm, L.RE_TOP), reBot = p(lm, L.RE_BOT);
+
+  m.lEyeW  = dx(leOut, leIn);
+  m.rEyeW  = dx(reIn, reOut);
+  m.avgEyeW = (m.lEyeW + m.rEyeW) / 2;
+  m.lEyeH  = dx(leTop, leBot);
+  m.rEyeH  = dx(reTop, reBot);
+  m.lAR    = m.lEyeH / m.lEyeW;
+  m.rAR    = m.rEyeH / m.rEyeW;
+  m.avgAR  = (m.lAR + m.rAR) / 2;
+
+  m.icd     = dx(leIn, reIn);
+  m.icdRatio = m.icd / m.avgEyeW;
+
+  m.biocular = dx(leOut, reOut);
+  m.lTilt  = ang(leIn, leOut);
+  m.rTilt  = ang(reIn, reOut);
+  m.avgTilt = (m.lTilt + m.rTilt) / 2;
+
+  // ── Brows ──────────────────────────────────────────────────────
+  const lbIn = p(lm, L.LB_IN), lbPk = p(lm, L.LB_PEAK), lbOut = p(lm, L.LB_OUT);
+  const rbIn = p(lm, L.RB_IN), rbPk = p(lm, L.RB_PEAK), rbOut = p(lm, L.RB_OUT);
+
+  // brow-eye dist = vertical gap from brow peak to upper lid (positive = brow above eye)
+  m.lBED = leTop.y - lbPk.y;
+  m.rBED = reTop.y - rbPk.y;
+  m.avgBED = (m.lBED + m.rBED) / 2;
+  m.bedFrac = m.avgBED / m.avgEyeW;  // fraction of eye width
+
+  // arch position: 0 = peak at inner end, 1 = peak at outer end; feminine ~0.65
+  m.lArch = lbOut.x !== lbIn.x ? (lbPk.x - lbIn.x) / (lbOut.x - lbIn.x) : 0.5;
+  m.rArch = rbOut.x !== rbIn.x ? (rbPk.x - rbIn.x) / (rbOut.x - rbIn.x) : 0.5;
+
+  // ── Nose ───────────────────────────────────────────────────────
+  const lAlar = p(lm, L.L_ALAR), rAlar = p(lm, L.R_ALAR);
+  const nasion = p(lm, L.NASION);
+
+  m.alarW      = dx(lAlar, rAlar);
+  m.alarIcdR   = m.alarW / m.icd;   // canon ~1.0
+
+  // ── Lower third ────────────────────────────────────────────────
+  const ulip = p(lm, L.UPPER_LIP), llip = p(lm, L.LOWER_LIP);
+  const stomU = p(lm, L.STOMION_U), stomD = p(lm, L.STOMION_D);
+
+  m.upperVerm  = stomU.y - ulip.y;
+  m.lowerVerm  = llip.y  - stomD.y;
+  m.lipRatio   = m.upperVerm / (m.lowerVerm || 1);  // canon ~0.6
+
+  m.philtrum   = ulip.y   - subnas.y;
+  m.lipChin    = ment.y   - ulip.y;
+  m.ltRatio    = m.lipChin / (m.philtrum || 1);  // canon ~2.0
+
+  // ── Symmetry ───────────────────────────────────────────────────
+  m.eyeSymm    = Math.min(m.lEyeW, m.rEyeW) / Math.max(m.lEyeW, m.rEyeW);
+  m.tiltDiff   = Math.abs(m.lTilt - m.rTilt);
+
+  const eyeMid = mid(leIn, reIn);
+  const noseTip = p(lm, L.NOSE_TIP);
+  m.midDev     = noseTip.x - eyeMid.x;
+  m.midDevPct  = m.midDev / m.biocular * 100;
+
+  // ── Store refs for annotation ──────────────────────────────────
+  m._pts = { trich, glab, subnas, ment, leOut, leIn, leTop, leBot,
+             reIn, reOut, reTop, reBot, lbIn, lbPk, lbOut, rbIn, rbPk, rbOut,
+             lAlar, rAlar, nasion, noseTip, ulip, llip, stomU, stomD, eyeMid };
+  m._W = W; m._H = H;
+
+  return m;
+}
+
+// ════════════════════════════════════════════════════════════════
+//  CANVAS ANNOTATION
+// ════════════════════════════════════════════════════════════════
+function drawCanvas(canvas, img, lm, m) {
+  const dpr = window.devicePixelRatio || 1;
+  const dW  = Math.min(window.innerWidth, 640);
+  const dH  = Math.round(img.naturalHeight * dW / img.naturalWidth);
+  const sc  = dW / img.naturalWidth;
+
+  canvas.width  = dW * dpr;
+  canvas.height = dH * dpr;
+  canvas.style.width  = dW + 'px';
+  canvas.style.height = dH + 'px';
+
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+  ctx.drawImage(img, 0, 0, dW, dH);
+
+  const s  = v => v * sc;
+  const sx = pt => ({ x: s(pt.x), y: s(pt.y) });
+  const q  = m._pts;
+
+  // ── Midline ──────────────────────────────────────────────────
+  const mxPx = s((q.leIn.x + q.reIn.x) / 2);
+  ctx.save();
+  ctx.setLineDash([4, 6]);
+  ctx.strokeStyle = 'rgba(100,200,255,.5)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(mxPx, s(q.trich.y));
+  ctx.lineTo(mxPx, s(q.ment.y));
+  ctx.stroke();
+  ctx.restore();
+
+  // ── Horizontal landmark lines ─────────────────────────────────
+  const hlines = [
+    { y: q.trich.y,  col: '#f0a030', lbl: 'Trichion ★',  dash: true },
+    { y: q.glab.y,   col: '#3ecfb8', lbl: 'Glabella',    dash: false },
+    { y: q.subnas.y, col: '#3ecfb8', lbl: 'Subnasale',   dash: false },
+    { y: q.ulip.y,   col: '#3ecfb8', lbl: 'Labrale sup', dash: false },
+    { y: q.ment.y,   col: '#3ecfb8', lbl: 'Menton',      dash: false },
+  ];
+  hlines.forEach(({ y, col, lbl, dash }) => {
+    const dy = s(y);
+    ctx.save();
+    ctx.strokeStyle = col;
+    ctx.lineWidth = 1;
+    ctx.globalAlpha = 0.7;
+    if (dash) ctx.setLineDash([3, 4]);
+    ctx.beginPath(); ctx.moveTo(32, dy); ctx.lineTo(dW - 32, dy); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.globalAlpha = 0.9;
+    ctx.fillStyle = col;
+    ctx.font = `${Math.max(10, Math.round(10 * sc))}px -apple-system, sans-serif`;
+    ctx.fillText(lbl, 36, dy - 4);
+    ctx.restore();
+  });
+
+  // ── Thirds bracket (right edge) ──────────────────────────────
+  const bx = dW - 14;
+  [
+    { y1: q.trich.y,  y2: q.glab.y,   lbl: `${m.upperPct.toFixed(1)}%`, col: '#f0a030' },
+    { y1: q.glab.y,   y2: q.subnas.y, lbl: `${m.midPct.toFixed(1)}%`,   col: '#3ecfb8' },
+    { y1: q.subnas.y, y2: q.ment.y,   lbl: `${m.lowerPct.toFixed(1)}%`, col: '#9b8dff' },
+  ].forEach(({ y1, y2, lbl, col }) => {
+    const sy1 = s(y1), sy2 = s(y2), my = (sy1 + sy2) / 2;
+    ctx.save();
+    ctx.strokeStyle = col; ctx.fillStyle = col;
+    ctx.lineWidth = 2; ctx.globalAlpha = 0.85;
+    ctx.beginPath();
+    ctx.moveTo(bx - 8, sy1); ctx.lineTo(bx, sy1);
+    ctx.moveTo(bx, sy1); ctx.lineTo(bx, sy2);
+    ctx.moveTo(bx, sy2); ctx.lineTo(bx - 8, sy2);
+    ctx.stroke();
+    ctx.textAlign = 'right';
+    ctx.font = `bold ${Math.max(9, Math.round(9 * sc))}px -apple-system, sans-serif`;
+    ctx.fillText(lbl, bx - 12, my + 4);
+    ctx.restore();
+  });
+
+  // ── Eye boxes ────────────────────────────────────────────────
+  ctx.save();
+  ctx.strokeStyle = '#3fbf72'; ctx.lineWidth = 1.5; ctx.globalAlpha = 0.85;
+  [[q.leOut, q.leIn, q.leTop, q.leBot], [q.reOut, q.reIn, q.reTop, q.reBot]].forEach(([outer, inner, top, bot]) => {
+    ctx.strokeRect(s(inner.x < outer.x ? inner.x : outer.x), s(top.y), s(Math.abs(outer.x - inner.x)), s(bot.y - top.y));
+  });
+  ctx.restore();
+
+  // ── Canthal tilt lines ───────────────────────────────────────
+  ctx.save();
+  ctx.strokeStyle = '#c084fc'; ctx.lineWidth = 2; ctx.globalAlpha = 0.85;
+  ctx.beginPath(); ctx.moveTo(s(q.leIn.x), s(q.leIn.y)); ctx.lineTo(s(q.leOut.x), s(q.leOut.y)); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(s(q.reIn.x), s(q.reIn.y)); ctx.lineTo(s(q.reOut.x), s(q.reOut.y)); ctx.stroke();
+  ctx.restore();
+
+  // ── ICD bracket ──────────────────────────────────────────────
+  const icdY = s((q.leIn.y + q.reIn.y) / 2) + s(m.avgEyeW * 0.55);
+  ctx.save();
+  ctx.strokeStyle = '#3fbf72'; ctx.fillStyle = '#3fbf72';
+  ctx.lineWidth = 1.5; ctx.globalAlpha = 0.8;
+  ctx.beginPath(); ctx.moveTo(s(q.leIn.x), icdY); ctx.lineTo(s(q.reIn.x), icdY); ctx.stroke();
+  [q.leIn.x, q.reIn.x].forEach(x => {
+    ctx.beginPath(); ctx.moveTo(s(x), icdY - 4); ctx.lineTo(s(x), icdY + 4); ctx.stroke();
+  });
+  ctx.textAlign = 'center';
+  ctx.font = `${Math.max(9, Math.round(9 * sc))}px -apple-system, sans-serif`;
+  ctx.fillText(`ICD ${m.icdRatio.toFixed(2)}×`, s((q.leIn.x + q.reIn.x) / 2), icdY + 13);
+  ctx.restore();
+
+  // ── Brow-eye distance lines ──────────────────────────────────
+  ctx.save();
+  ctx.strokeStyle = '#f0a030'; ctx.lineWidth = 1;
+  ctx.globalAlpha = 0.7; ctx.setLineDash([2, 3]);
+  [[q.lbPk, q.leTop], [q.rbPk, q.reTop]].forEach(([brow, eye]) => {
+    ctx.beginPath(); ctx.moveTo(s(brow.x), s(brow.y)); ctx.lineTo(s(brow.x), s(eye.y)); ctx.stroke();
+  });
+  ctx.restore();
+
+  // ── Alar width ───────────────────────────────────────────────
+  const aY = s((q.lAlar.y + q.rAlar.y) / 2);
+  ctx.save();
+  ctx.strokeStyle = '#f0a030'; ctx.lineWidth = 1.5; ctx.globalAlpha = 0.75;
+  ctx.beginPath(); ctx.moveTo(s(q.lAlar.x), aY); ctx.lineTo(s(q.rAlar.x), aY); ctx.stroke();
+  [q.lAlar.x, q.rAlar.x].forEach(x => {
+    ctx.beginPath(); ctx.moveTo(s(x), aY - 4); ctx.lineTo(s(x), aY + 4); ctx.stroke();
+  });
+  ctx.restore();
+
+  // ── Landmark dots ────────────────────────────────────────────
+  const dots = {
+    '#3fbf72': [q.glab, q.subnas, q.ment, q.ulip, q.llip,
+                q.leIn, q.leOut, q.reIn, q.reOut,
+                q.lbPk, q.rbPk, q.lAlar, q.rAlar, q.noseTip],
+    '#f0a030': [q.trich],
+  };
+  Object.entries(dots).forEach(([col, pts]) => {
+    pts.forEach(pt => {
+      ctx.save();
+      ctx.fillStyle = col; ctx.globalAlpha = 0.9;
+      ctx.beginPath(); ctx.arc(s(pt.x), s(pt.y), Math.max(3, 3 * sc), 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+    });
+  });
+
+  // ── Legend ───────────────────────────────────────────────────
+  const legY = dH - 50;
+  ctx.save();
+  ctx.globalAlpha = 0.8;
+  ctx.font = `${Math.max(9, Math.round(9 * sc))}px -apple-system, sans-serif`;
+  [
+    { col: '#3fbf72', lbl: '● Detected' },
+    { col: '#f0a030', lbl: '● Estimated  ★ = low conf' },
+    { col: '#c084fc', lbl: '— Canthal tilt' },
+  ].forEach(({ col, lbl }, i) => {
+    ctx.fillStyle = col;
+    ctx.fillText(lbl, 10, legY + i * 13);
+  });
+  ctx.restore();
+}
+
+// ════════════════════════════════════════════════════════════════
+//  REPORT BUILDER
+// ════════════════════════════════════════════════════════════════
+const f1 = v => v.toFixed(1);
+const f2 = v => v.toFixed(2);
+const pct = v => v.toFixed(1) + '%';
+const sgn = v => (v >= 0 ? '+' : '') + v.toFixed(1) + '°';
+
+function bdg(label, cls) {
+  return `<span class="badge ${cls}">${label}</span>`;
+}
+
+function devBdg(val, canon, tol) {
+  const d = Math.abs((val - canon) / canon * 100);
+  if (d <= tol)      return bdg('✓ Canon', 'ok');
+  if (d <= tol * 2)  return bdg(val > canon ? '↑ High' : '↓ Low', 'warn');
+  return bdg(val > canon ? '↑↑ High' : '↓↓ Low', 'off');
+}
+
+function buildReport(m) {
+  return `
+  <!-- KEY -->
+  <div class="card">
+    <div class="card-head">Confidence Key</div>
+    <div class="conf-row"><span class="dot dot-g"></span>Detected — direct 478-pt landmark</div>
+    <div class="conf-row"><span class="dot dot-a"></span>Estimated — derived from detected points</div>
+    <div class="conf-row"><span class="dot dot-r"></span>Low — inherent single-angle limitation</div>
+  </div>
+
+  <!-- FACIAL THIRDS -->
+  <div class="card">
+    <div class="card-head">Facial Thirds</div>
+    ${m.upperPct < 15 ? `<div class="sub" style="color:var(--amber)">⚠ Upper third reads very short — hairline may be obscured or receded. Treat as estimated.</div>` : ''}
+    <div class="mrow">
+      <span class="mname">Upper  (trichion → glabella)</span>
+      <span class="mval">${pct(m.upperPct)}</span>
+      <span class="mcanon">33.3%</span>
+      ${devBdg(m.upperPct, 33.3, 8)}
+    </div>
+    <div class="sub">Conf: LOW ★ — trichion is forehead landmark, not true hairline</div>
+    <div class="mrow">
+      <span class="mname">Middle (glabella → subnasale)</span>
+      <span class="mval">${pct(m.midPct)}</span>
+      <span class="mcanon">33.3%</span>
+      ${devBdg(m.midPct, 33.3, 8)}
+    </div>
+    <div class="sub">Conf: DETECTED</div>
+    <div class="mrow">
+      <span class="mname">Lower  (subnasale → menton)</span>
+      <span class="mval">${pct(m.lowerPct)}</span>
+      <span class="mcanon">33.3%</span>
+      ${devBdg(m.lowerPct, 33.3, 8)}
+    </div>
+    <div class="sub">Conf: DETECTED</div>
+  </div>
+
+  <!-- EYE METRICS -->
+  <div class="card">
+    <div class="card-head">Eye Metrics</div>
+    <div class="mrow">
+      <span class="mname">Intercanthal / eye-width ratio</span>
+      <span class="mval">${f2(m.icdRatio)}</span>
+      <span class="mcanon">~1.0</span>
+      ${m.icdRatio < 0.9 ? bdg('Close-set', 'info') : m.icdRatio > 1.1 ? bdg('Wide-set', 'warn') : bdg('Canonical', 'ok')}
+    </div>
+    <div class="sub">Conf: DETECTED</div>
+    <div class="mrow">
+      <span class="mname">Left canthal tilt</span>
+      <span class="mval">${sgn(m.lTilt)}</span>
+      <span class="mcanon">+1–5°</span>
+      ${m.lTilt >= 1 ? bdg('Positive', 'ok') : m.lTilt >= 0 ? bdg('Neutral', 'warn') : bdg('Negative', 'off')}
+    </div>
+    <div class="mrow">
+      <span class="mname">Right canthal tilt</span>
+      <span class="mval">${sgn(m.rTilt)}</span>
+      <span class="mcanon">+1–5°</span>
+      ${m.rTilt >= 1 ? bdg('Positive', 'ok') : m.rTilt >= 0 ? bdg('Neutral', 'warn') : bdg('Negative', 'off')}
+    </div>
+    <div class="sub">Positive = outer canthus higher than inner. Conf: DETECTED</div>
+    <div class="mrow">
+      <span class="mname">Eye aspect ratio (height ÷ width)</span>
+      <span class="mval">${f2(m.avgAR)}</span>
+      <span class="mcanon">0.25–0.35</span>
+      ${m.avgAR >= 0.25 && m.avgAR <= 0.40 ? bdg('In range', 'ok') : bdg('Out of range', 'warn')}
+    </div>
+    <div class="sub">Higher = more open eye vertically. Expression-sensitive. Conf: DETECTED</div>
+  </div>
+
+  <!-- BROW METRICS -->
+  <div class="card">
+    <div class="card-head">Brow Metrics</div>
+    <div class="mrow">
+      <span class="mname">Brow-eye distance (× eye width)</span>
+      <span class="mval">${f2(m.bedFrac)}×</span>
+      <span class="mcanon">≥0.40 fem</span>
+      ${m.bedFrac >= 0.40 ? bdg('Feminine range', 'ok') : m.bedFrac >= 0.25 ? bdg('Neutral', 'warn') : bdg('Masculine range', 'off')}
+    </div>
+    <div class="sub">Vertical gap between brow peak and upper lid, normalised to eye width. Strongest single frontal dimorphism marker. Conf: DETECTED</div>
+    <div class="mrow">
+      <span class="mname">Left brow arch position</span>
+      <span class="mval">${pct(m.lArch * 100)}</span>
+      <span class="mcanon">60–70%</span>
+      ${devBdg(m.lArch * 100, 65, 10)}
+    </div>
+    <div class="mrow">
+      <span class="mname">Right brow arch position</span>
+      <span class="mval">${pct(m.rArch * 100)}</span>
+      <span class="mcanon">60–70%</span>
+      ${devBdg(m.rArch * 100, 65, 10)}
+    </div>
+    <div class="sub">Peak as % from inner brow. ~65% = high lateral arch (feminine-coded). Lower % = flatter, more medial peak. Conf: DETECTED</div>
+  </div>
+
+  <!-- NOSE -->
+  <div class="card">
+    <div class="card-head">Nose (Frontal Only)</div>
+    <div class="mrow">
+      <span class="mname">Alar width ÷ intercanthal distance</span>
+      <span class="mval">${f2(m.alarIcdR)}</span>
+      <span class="mcanon">~1.0</span>
+      ${devBdg(m.alarIcdR, 1.0, 10)}
+    </div>
+    <div class="sub">Canon: alar base ≈ ICD. Conf: DETECTED · ⚠ Profile metrics (nasolabial angle, projection, dorsal profile) not assessable from this angle.</div>
+  </div>
+
+  <!-- LOWER THIRD -->
+  <div class="card">
+    <div class="card-head">Lower Third Sub-Partition</div>
+    <div class="mrow">
+      <span class="mname">Philtrum : (lip + chin) ratio</span>
+      <span class="mval">1 : ${f2(m.ltRatio)}</span>
+      <span class="mcanon">1 : 2.0</span>
+      ${devBdg(m.ltRatio, 2.0, 15)}
+    </div>
+    <div class="sub">Conf: DETECTED</div>
+    <div class="mrow">
+      <span class="mname">Upper : lower vermilion ratio</span>
+      <span class="mval">${f2(m.lipRatio)}</span>
+      <span class="mcanon">~0.60</span>
+      ${devBdg(m.lipRatio, 0.60, 20)}
+    </div>
+    <div class="sub">Upper lip should be ~60% of lower. Expression-sensitive. Conf: DETECTED</div>
+  </div>
+
+  <!-- SYMMETRY -->
+  <div class="card">
+    <div class="card-head">Symmetry</div>
+    <div class="mrow">
+      <span class="mname">Eye width symmetry (minor ÷ major)</span>
+      <span class="mval">${pct(m.eyeSymm * 100)}</span>
+      <span class="mcanon">≥90%</span>
+      ${m.eyeSymm >= 0.90 ? bdg('Symmetric', 'ok') : bdg('Asymmetry', 'warn')}
+    </div>
+    <div class="mrow">
+      <span class="mname">Canthal tilt L vs R difference</span>
+      <span class="mval">${f1(m.tiltDiff)}°</span>
+      <span class="mcanon">≤2°</span>
+      ${m.tiltDiff <= 2 ? bdg('Symmetric', 'ok') : bdg('Asymmetry', 'warn')}
+    </div>
+    <div class="mrow">
+      <span class="mname">Nose tip midline deviation</span>
+      <span class="mval">${f1(Math.abs(m.midDevPct))}% ${m.midDev > 0 ? '→R' : '→L'}</span>
+      <span class="mcanon">≤2%</span>
+      ${Math.abs(m.midDevPct) <= 2 ? bdg('Centered', 'ok') : bdg('Deviation', 'warn')}
+    </div>
+    <div class="sub">Conf: DETECTED · Directional lighting inflates apparent asymmetry.</div>
+  </div>
+
+  <!-- DIMORPHISM -->
+  <div class="card">
+    <div class="card-head">Dimorphism Markers (Frontal, Structural)</div>
+    ${buildDimorphism(m)}
+    <div class="sub">These are population-level statistical tendencies, not diagnostic categories. Jaw width, brow ridge, orbital rim prominence — the strongest structural markers — require profile/3-4 view. Jawline, gonial angle and mandibular angle not assessable frontally.</div>
+  </div>
+
+  <!-- PRESENTATION NOTES -->
+  <div class="card">
+    <div class="card-head">Presentation Levers</div>
+    ${buildPresNotes(m)}
+  </div>
+
+  <!-- METHODOLOGY -->
+  <div class="card">
+    <div class="card-head">Methodology</div>
+    <div class="method-note">MediaPipe 478-point face mesh · frontal view only · pixel-ratio measurements (scale-independent). Trichion (landmark 10) approximates forehead center, not true hairline — upper-third values carry LOW confidence when hairline is ambiguous or receded. Profile-dependent metrics (nasofrontal/nasolabial/nasomental angles, chin projection, orbital vector, maxillary projection) are not reported from a single frontal image. Canon values are descriptive norms derived from published morphometric literature.</div>
+  </div>
+  `;
+}
+
+function buildDimorphism(m) {
+  const rows = [
+    {
+      name: 'Brow-eye distance',
+      val:  m.bedFrac >= 0.40 ? 'Feminine range' : m.bedFrac >= 0.25 ? 'Neutral' : 'Masculine range',
+      cls:  m.bedFrac >= 0.40 ? 'ok' : m.bedFrac >= 0.25 ? 'warn' : 'off',
+      note: 'Largest brow-eye gap = strongest single frontal femininity signal',
+    },
+    {
+      name: 'Brow arch position',
+      val:  m.lArch > 0.55 ? 'Lateral arch (fem)' : 'Flat/medial (masc)',
+      cls:  m.lArch > 0.55 ? 'ok' : 'off',
+      note: 'High lateral arch is a primary feminine brow cue',
+    },
+    {
+      name: 'Canthal tilt',
+      val:  m.avgTilt >= 1 ? `Positive (avg ${sgn(m.avgTilt)})` : 'Neutral / negative',
+      cls:  m.avgTilt >= 1 ? 'ok' : 'warn',
+      note: 'Not strongly dimorphic; positive tilt is favorable across sexes',
+    },
+    {
+      name: 'Eye aspect ratio',
+      val:  m.avgAR >= 0.30 ? 'Higher (fem-leaning)' : 'Lower (neutral/masc)',
+      cls:  m.avgAR >= 0.30 ? 'ok' : 'warn',
+      note: 'Slightly larger vertical eye opening trends feminine',
+    },
+  ];
+  return rows.map(r => `
+    <div class="mrow"><span class="mname">${r.name}</span>${bdg(r.val, r.cls)}</div>
+    <div class="sub">${r.note}</div>
+  `).join('');
+}
+
+function buildPresNotes(m) {
+  const notes = [];
+
+  if (m.bedFrac < 0.40) {
+    notes.push({
+      lbl: 'Brow — Highest Priority',
+      col: 'var(--red)',
+      txt: `Brow-eye distance (${f2(m.bedFrac)}× eye-width) reads in the masculine-coded range. Reshaping toward a higher arch — with peak around 60–65% from the inner end — and opening the brow-to-eye space is the single highest-yield non-surgical intervention available. Professional brow mapping before any threading or tinting is recommended.`
+    });
+  }
+
+  if (m.lArch < 0.55 || m.rArch < 0.55) {
+    notes.push({
+      lbl: 'Brow Arch Shape',
+      col: 'var(--amber)',
+      txt: `Brow peak sits at ${pct(((m.lArch + m.rArch)/2)*100)} from inner end — lower than the feminine ideal of ~65%. Removing hair from the underside of the outer third shifts the apparent peak laterally without reducing overall brow height.`
+    });
+  }
+
+  if (m.avgAR < 0.28) {
+    notes.push({
+      lbl: 'Eye Opening',
+      col: 'var(--amber)',
+      txt: `Eye aspect ratio (${f2(m.avgAR)}) reads on the lower side. Upper lash tightlining and mascara on upper lashes only (skip lower) increases apparent vertical eye height. Avoid thick lower liner, which closes the eye.`
+    });
+  }
+
+  if (m.lipRatio < 0.50) {
+    notes.push({
+      lbl: 'Lip Volume',
+      col: 'var(--amber)',
+      txt: `Upper vermilion reads thin (ratio ${f2(m.lipRatio)}, canon ~0.60). Overlining just at the Cupid's bow peak — not the full border — and applying a lighter or glossy center on the upper lip adds apparent volume. Avoid lining the full upper border, which looks artificial.`
+    });
+  }
+
+  if (m.icdRatio > 1.15) {
+    notes.push({
+      lbl: 'Eye Spacing',
+      col: 'var(--amber)',
+      txt: `ICD reads wide (${f2(m.icdRatio)}× eye width). Inner corner highlight or precise tight inner-corner liner can optically reduce apparent spacing.`
+    });
+  }
+
+  if (m.avgTilt >= 1) {
+    notes.push({
+      lbl: `Canthal Tilt — Asset`,
+      col: 'var(--green)',
+      txt: `Positive canthal tilt (avg ${sgn(m.avgTilt)}) is a favorable feature. Cat-eye liner or lash extension application angled upward at the outer corner reinforces and emphasises this.`
+    });
+  }
+
+  if (notes.length === 0) {
+    notes.push({
+      lbl: 'No high-priority flags',
+      col: 'var(--green)',
+      txt: 'Measured values fall within or near canonical ranges. Focus on personal preference and context-specific goals rather than corrective interventions.'
+    });
+  }
+
+  // Always add context note
+  notes.push({
+    lbl: 'Beyond the face',
+    col: 'var(--violet)',
+    txt: 'Presentation in low-stakes public settings is driven largely by voice, posture, clothing silhouette, and hair framing — none of which appear here. Voice/movement work frequently moves the needle more than any cosmetic change. Facial analysis is one input among many.'
+  });
+
+  return notes.map(n => `
+    <div class="pnote">
+      <span class="pnlabel" style="color:${n.col}">${n.lbl}.</span>${n.txt}
+    </div>
+  `).join('');
+}
+
+// ════════════════════════════════════════════════════════════════
+//  SAVE
+// ════════════════════════════════════════════════════════════════
+function saveImg() {
+  const canvas = document.getElementById('result-canvas');
+  const url = canvas.toDataURL('image/jpeg', 0.92);
+  // On iPhone: open in new tab → long-press → Save to Photos
+  const w = window.open();
+  if (w) {
+    w.document.write(
+      `<html><body style="margin:0;background:#000">` +
+      `<img src="${url}" style="width:100%;display:block">` +
+      `<p style="font-family:sans-serif;color:#888;padding:12px;font-size:13px">` +
+      `Long-press the image → "Add to Photos" to save.</p></body></html>`
+    );
+  } else {
+    // Popup blocked fallback
+    const a = document.createElement('a');
+    a.href = url; a.download = 'morphometric.jpg'; a.click();
+  }
+}
+
+// ════════════════════════════════════════════════════════════════
+//  INIT
+// ════════════════════════════════════════════════════════════════
+show('screen-upload');
+</script>
+</body>
+</html>
