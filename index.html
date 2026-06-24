@@ -405,6 +405,9 @@ let jawPoints  = null;
 let currentZoom = 1;      // 1.0 = 100%, 2.0 = 200%, etc.
 let zoomPanX   = 0;       // pan offset in canvas coords
 let zoomPanY   = 0;
+let panDragging = false;  // dragging to pan (not edit a point)
+let panStartX  = 0;
+let panStartY  = 0;
 
 let showMeasurements = {
   thirds: true, eyes: true, brows: true, jaw: true, alar: true
@@ -1781,26 +1784,51 @@ function setDragPos(key, x, y) {
 
 function onPointerDown(e) {
   if (!editMode || !currentLm) return;
+  const src = e.touches ? e.touches[0] : e;
+  panStartX = src.clientX;
+  panStartY = src.clientY;
   const { cx, cy } = canvasXY(e);
   dragKey = nearestDraggable(cx, cy);
-  if (dragKey) e.preventDefault();
+  if (dragKey) {
+    e.preventDefault();
+  } else if (currentZoom > 1) {
+    // Not on a point; if zoomed, allow pan drag
+    panDragging = true;
+    e.preventDefault();
+  }
 }
 
 function onPointerMove(e) {
-  if (!editMode || !dragKey || !currentLm) return;
-  e.preventDefault();
-  const { cx, cy } = canvasXY(e);
-  setDragPos(dragKey, cx / currentSc, cy / currentSc);
-  // Fast canvas-only redraw while dragging
-  const canvas  = document.getElementById('result-canvas');
-  const metrics = calcMetrics(currentLm, currentImg.naturalWidth, currentImg.naturalHeight);
-  drawCanvas(canvas, currentImg, currentLm, metrics);
+  if (!editMode) return;
+
+  if (dragKey && currentLm) {
+    // Dragging a point
+    e.preventDefault();
+    const { cx, cy } = canvasXY(e);
+    setDragPos(dragKey, cx / currentSc, cy / currentSc);
+    const canvas  = document.getElementById('result-canvas');
+    const metrics = calcMetrics(currentLm, currentImg.naturalWidth, currentImg.naturalHeight);
+    drawCanvas(canvas, currentImg, currentLm, metrics);
+  } else if (panDragging) {
+    // Pan dragging
+    e.preventDefault();
+    const src = e.touches ? e.touches[0] : e;
+    const dx = src.clientX - panStartX;
+    const dy = src.clientY - panStartY;
+    zoomPanX += dx / currentZoom;
+    zoomPanY += dy / currentZoom;
+    panStartX = src.clientX;
+    panStartY = src.clientY;
+    fullRedraw();
+  }
 }
 
 function onPointerUp() {
-  if (!dragKey) return;
-  dragKey = null;
-  fullRedraw(); // update metrics panel after drag ends
+  if (dragKey) {
+    dragKey = null;
+    fullRedraw();
+  }
+  panDragging = false;
 }
 
 (function attachEditorListeners() {
