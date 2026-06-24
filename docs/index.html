@@ -314,6 +314,15 @@ body {
     <button class="btn" onclick="saveImg()">Save ↗</button>
   </div>
 
+  <div style="padding:8px 12px; background:var(--s2); border-bottom:1px solid var(--border); display:flex; gap:6px; flex-wrap:wrap; align-items:center;">
+    <span style="font-size:10px; color:var(--text2); margin-right:2px;">SHOW:</span>
+    <button class="btn" style="padding:4px 9px; font-size:10px;" onclick="toggleMeasure('thirds', this)">Thirds</button>
+    <button class="btn" style="padding:4px 9px; font-size:10px;" onclick="toggleMeasure('eyes', this)">Eyes</button>
+    <button class="btn" style="padding:4px 9px; font-size:10px;" onclick="toggleMeasure('brows', this)">Brows</button>
+    <button class="btn" style="padding:4px 9px; font-size:10px;" onclick="toggleMeasure('jaw', this)">Jaw</button>
+    <button class="btn" style="padding:4px 9px; font-size:10px;" onclick="toggleMeasure('alar', this)">Alar</button>
+  </div>
+
   <canvas id="result-canvas"></canvas>
   <div id="rpt" class="rpt"></div>
 </div>
@@ -384,6 +393,10 @@ let currentSc  = 1;
 let editMode   = false;
 let dragKey    = null;
 
+let showMeasurements = {
+  thirds: true, eyes: true, brows: true, jaw: true, alar: true
+};
+
 // ════════════════════════════════════════════════════════════════
 //  DRAGGABLE POINT MAP  (display key → landmark index)
 // ════════════════════════════════════════════════════════════════
@@ -401,6 +414,11 @@ const DRAGGABLE = {
 // ════════════════════════════════════════════════════════════════
 //  UI
 // ════════════════════════════════════════════════════════════════
+function toggleMeasure(key, btn) {
+  showMeasurements[key] = !showMeasurements[key];
+  if (btn) btn.style.opacity = showMeasurements[key] ? '1' : '0.4';
+  fullRedraw();
+}
 function show(id) {
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   document.getElementById(id).classList.add('active');
@@ -703,6 +721,7 @@ function drawCanvas(canvas, img, lm, m) {
   const q  = m._pts;
 
   // ── Midline ──────────────────────────────────────────────────
+  if (showMeasurements.thirds) {
   const mxPx = s((q.leIn.x + q.reIn.x) / 2);
   ctx.save();
   ctx.setLineDash([4, 6]);
@@ -759,8 +778,10 @@ function drawCanvas(canvas, img, lm, m) {
     ctx.fillText(lbl, bx - 12, my + 4);
     ctx.restore();
   });
+  } // end thirds
 
   // ── Eye boxes ────────────────────────────────────────────────
+  if (showMeasurements.eyes) {
   ctx.save();
   ctx.strokeStyle = '#3fbf72'; ctx.lineWidth = 1.5; ctx.globalAlpha = 0.85;
   [[q.leOut, q.leIn, q.leTop, q.leBot], [q.reOut, q.reIn, q.reTop, q.reBot]].forEach(([outer, inner, top, bot]) => {
@@ -788,8 +809,10 @@ function drawCanvas(canvas, img, lm, m) {
   ctx.font = `${Math.max(9, Math.round(9 * sc))}px -apple-system, sans-serif`;
   ctx.fillText(`ICD ${m.icdRatio.toFixed(2)}×`, s((q.leIn.x + q.reIn.x) / 2), icdY + 13);
   ctx.restore();
+  } // end eyes
 
   // ── Brow-eye distance lines ──────────────────────────────────
+  if (showMeasurements.brows) {
   ctx.save();
   ctx.strokeStyle = '#f0a030'; ctx.lineWidth = 1;
   ctx.globalAlpha = 0.7; ctx.setLineDash([2, 3]);
@@ -797,8 +820,10 @@ function drawCanvas(canvas, img, lm, m) {
     ctx.beginPath(); ctx.moveTo(s(brow.x), s(brow.y)); ctx.lineTo(s(brow.x), s(eye.y)); ctx.stroke();
   });
   ctx.restore();
+  } // end brows
 
   // ── Alar width ───────────────────────────────────────────────
+  if (showMeasurements.alar) {
   const aY = s((q.lAlar.y + q.rAlar.y) / 2);
   ctx.save();
   ctx.strokeStyle = '#f0a030'; ctx.lineWidth = 1.5; ctx.globalAlpha = 0.75;
@@ -807,8 +832,10 @@ function drawCanvas(canvas, img, lm, m) {
     ctx.beginPath(); ctx.moveTo(s(x), aY - 4); ctx.lineTo(s(x), aY + 4); ctx.stroke();
   });
   ctx.restore();
+  } // end alar
 
   // ── Bizygomatic width (cheekbone to cheekbone) ───────────────
+  if (showMeasurements.jaw) {
   if (q.lTemple && q.rTemple) {
     const bizY = s((q.lTemple.y + q.rTemple.y) / 2);
     ctx.save();
@@ -839,6 +866,7 @@ function drawCanvas(canvas, img, lm, m) {
     ctx.fillText(`JAW`, s((q.lJaw.x + q.rJaw.x) / 2), jawY + 14);
     ctx.restore();
   }
+  } // end jaw
 
   // ── Landmark dots ────────────────────────────────────────────
   const dots = {
