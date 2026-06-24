@@ -672,17 +672,19 @@ function calcMetrics(lm, W, H) {
   // ── Brow position / height above rim ───────────────────────────
   // Estimate supraorbital rim as slightly above eye top
   const rimEst = leTop.y - m.avgEyeW * 0.15;  // rough orbital rim position
-  m.lBrowH = rimEst - lbPk.y;  // 10–15mm fem, 0–5mm masc (but in pixels)
+  // Brow height in pixels, normalized to eye width for rough mm comparison
+  // (assumes typical eye width ~30px ≈ 35mm in reference images)
+  m.lBrowH = rimEst - lbPk.y;
   m.rBrowH = rimEst - rbPk.y;
-  m.avgBrowH = (m.lBrowH + m.rBrowH) / 2;
+  m.avgBrowH = (m.lBrowH + m.rBrowH) / 2;  // Canon: 10–15px equiv fem, 0–5px equiv masc
 
   // ── Chin landmarks and dimensions ───────────────────────────────
   const lChin = p(lm, L.L_CHIN), rChin = p(lm, L.R_CHIN);
   m.chinW = dx(lChin, rChin);
   m.chinTaper = m.chinW / m.biJaw;  // 0.45–0.55 fem
 
-  // Chin height = lower lip to menton
-  m.chinH = ment.y - ulip.y;
+  // Chin height = lower lip to menton (soft tissue chin height)
+  m.chinH = ment.y - llip.y;
   m.chinHRatio = m.chinH / m.lowerPx;  // fraction of lower third; 0.45–0.55 fem
 
   // ── Lip proportions (enhanced) ──────────────────────────────────
@@ -1223,11 +1225,12 @@ function buildReport(m) {
   <div class="card">
     <div class="card-head">Brow Position & Arch</div>
     <div class="mrow">
-      <span class="mname">Brow height above orbital rim (avg, pixels)</span>
+      <span class="mname">Brow height above orbital rim (pixels, eye-normalized)</span>
       <span class="mval">${f1(m.avgBrowH)}</span>
       <span class="mcanon">F: 10–15mm · M: 0–5mm</span>
       ${m.avgBrowH >= 10 * (m.avgEyeW / 30) ? bdg('Feminine-elevated', 'ok') : m.avgBrowH >= 5 * (m.avgEyeW / 30) ? bdg('Neutral', 'warn') : bdg('At/below rim', 'off')}
     </div>
+    <div class="sub">Measured in pixels and scaled to eye width to approximate the canonical mm reference. Positive distance = brow above orbital rim (feminine). Conf: ESTIMATED</div>
     <div class="mrow">
       <span class="mname">Left brow arch position</span>
       <span class="mval">${pct(m.lArch * 100)}</span>
