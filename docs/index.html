@@ -760,13 +760,11 @@ function drawCanvas(canvas, img, lm, m) {
   const sc  = dW / img.naturalWidth;
   currentSc = sc;
 
-  // Zoom applies a viewport clip and scale
-  const zW = Math.round(dW / currentZoom);
-  const zH = Math.round(dH / currentZoom);
-  canvas.width  = zW * dpr;
-  canvas.height = zH * dpr;
-  canvas.style.width  = zW + 'px';
-  canvas.style.height = zH + 'px';
+  // Canvas always stays full width — zoom is applied via ctx transform only
+  canvas.width  = dW * dpr;
+  canvas.height = dH * dpr;
+  canvas.style.width  = dW + 'px';
+  canvas.style.height = dH + 'px';
 
   const ctx = canvas.getContext('2d');
   ctx.scale(dpr, dpr);
@@ -1728,8 +1726,17 @@ function toggleEdit() {
 }
 
 function changeZoom(delta) {
-  currentZoom = Math.max(1, Math.min(4, currentZoom + delta));
-  document.getElementById('zoom-label').textContent = (currentZoom).toFixed(1) + 'x';
+  currentZoom = Math.max(1, Math.min(4, Math.round((currentZoom + delta) * 10) / 10));
+  if (currentZoom === 1) {
+    zoomPanX = 0; zoomPanY = 0;
+  } else if (currentImg) {
+    // Zoom into center of the image
+    const dW = Math.min(window.innerWidth, 640);
+    const dH = Math.round(currentImg.naturalHeight * dW / currentImg.naturalWidth);
+    zoomPanX = dW / 2 * (1 / currentZoom - 1);
+    zoomPanY = dH / 2 * (1 / currentZoom - 1);
+  }
+  document.getElementById('zoom-label').textContent = currentZoom.toFixed(1) + 'x';
   fullRedraw();
 }
 
@@ -1815,8 +1822,13 @@ function onPointerMove(e) {
     const src = e.touches ? e.touches[0] : e;
     const dx = src.clientX - panStartX;
     const dy = src.clientY - panStartY;
-    zoomPanX += dx / currentZoom;
-    zoomPanY += dy / currentZoom;
+    const dW = Math.min(window.innerWidth, 640);
+    const dH = currentImg ? Math.round(currentImg.naturalHeight * dW / currentImg.naturalWidth) : dW;
+    // pan offset is in pre-zoom (image display) space; clamp so image stays on screen
+    const minX = dW * (1 / currentZoom - 1);
+    const minY = dH * (1 / currentZoom - 1);
+    zoomPanX = Math.max(minX, Math.min(0, zoomPanX + dx / currentZoom));
+    zoomPanY = Math.max(minY, Math.min(0, zoomPanY + dy / currentZoom));
     panStartX = src.clientX;
     panStartY = src.clientY;
     fullRedraw();
