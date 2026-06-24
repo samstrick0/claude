@@ -355,6 +355,18 @@ const L = {
 
   L_MOUTH:     61,  // left mouth corner
   R_MOUTH:    291,  // right mouth corner
+
+  // Cheekbone / bizygomatic (widest malar prominence)
+  L_TEMPLE:   227,  // left temple/cheekbone area
+  R_TEMPLE:   454,  // right temple/cheekbone area
+
+  // Jaw angles / bigonial
+  L_JAW:      172,  // left jaw angle
+  R_JAW:      397,  // right jaw angle
+
+  // Additional chin landmarks
+  L_CHIN:     206,  // left chin contour
+  R_CHIN:     426,  // right chin contour
 };
 
 // ════════════════════════════════════════════════════════════════
@@ -588,6 +600,53 @@ function calcMetrics(lm, W, H) {
   m.lipChin    = ment.y   - ulip.y;
   m.ltRatio    = m.lipChin / (m.philtrum || 1);  // canon ~2.0
 
+  // ── Cheekbone / Bizygomatic ────────────────────────────────────
+  const lTemple = p(lm, L.L_TEMPLE), rTemple = p(lm, L.R_TEMPLE);
+  m.bizWidth = dx(lTemple, rTemple);  // cheekbone width estimate
+
+  // ── Jaw landmarks ──────────────────────────────────────────────
+  const lJaw = p(lm, L.L_JAW), rJaw = p(lm, L.R_JAW);
+  m.biJaw = dx(lJaw, rJaw);  // jaw angle to jaw angle
+  m.jawTaper = m.biJaw / m.bizWidth;  // 0.73–0.80 fem, 0.83–0.92 masc
+
+  // ── Facial Width-to-Height Ratio (fWHR) ────────────────────────
+  const nasionY = nasion.y;
+  const ulipY   = ulip.y;
+  const nasFWHRHeight = ulipY - nasionY;
+  m.fWHR = m.bizWidth / nasFWHRHeight;  // 1.5–1.7 fem, 1.9–2.1 masc
+
+  // ── Palpebral fissure (eye opening) details ─────────────────────
+  m.lPalpH = m.lEyeH;  // already have
+  m.rPalpH = m.rEyeH;
+  m.avgPalpH = m.avgAR * m.avgEyeW;  // derive height from aspect ratio
+  m.palpRatio = m.avgPalpH / m.avgEyeW;  // should be ~1:3, so .33
+
+  // ── Brow position / height above rim ───────────────────────────
+  // Estimate supraorbital rim as slightly above eye top
+  const rimEst = leTop.y - m.avgEyeW * 0.15;  // rough orbital rim position
+  m.lBrowH = rimEst - lbPk.y;  // 10–15mm fem, 0–5mm masc (but in pixels)
+  m.rBrowH = rimEst - rbPk.y;
+  m.avgBrowH = (m.lBrowH + m.rBrowH) / 2;
+
+  // ── Chin landmarks and dimensions ───────────────────────────────
+  const lChin = p(lm, L.L_CHIN), rChin = p(lm, L.R_CHIN);
+  m.chinW = dx(lChin, rChin);
+  m.chinTaper = m.chinW / m.biJaw;  // 0.45–0.55 fem
+
+  // Chin height = lower lip to menton
+  m.chinH = ment.y - ulip.y;
+  m.chinHRatio = m.chinH / m.lowerPx;  // fraction of lower third; 0.45–0.55 fem
+
+  // ── Lip proportions (enhanced) ──────────────────────────────────
+  const mouthW = dx(p(lm, L.L_MOUTH), p(lm, L.R_MOUTH));
+  m.mouthWAlarR = mouthW / m.alarW;  // ideal 1.3–1.5
+
+  const lipH = m.upperVerm + m.lowerVerm;
+  m.lipHeightRatio = lipH / m.lowerPx;  // 18–22% fem of lower third
+
+  // Upper lip show estimate (visible pink above closure line)
+  m.ulipShow = stomU.y - ulip.y;  // rough estimate; ideal 3–5mm
+
   // ── Symmetry ───────────────────────────────────────────────────
   m.eyeSymm    = Math.min(m.lEyeW, m.rEyeW) / Math.max(m.lEyeW, m.rEyeW);
   m.tiltDiff   = Math.abs(m.lTilt - m.rTilt);
@@ -597,10 +656,16 @@ function calcMetrics(lm, W, H) {
   m.midDev     = noseTip.x - eyeMid.x;
   m.midDevPct  = m.midDev / m.biocular * 100;
 
+  // Per-region asymmetry (mirroring check)
+  m.browSymm   = Math.abs(lbPk.x - (2 * eyeMid.x - rbPk.x)) / m.bizWidth * 100;
+  m.jawSymm    = Math.abs(lJaw.x - (2 * eyeMid.x - rJaw.x)) / m.bizWidth * 100;
+  m.mouthSymm  = Math.abs(p(lm, L.L_MOUTH).x - (2 * eyeMid.x - p(lm, L.R_MOUTH).x)) / m.bizWidth * 100;
+
   // ── Store refs for annotation ──────────────────────────────────
   m._pts = { trich, glab, subnas, ment, leOut, leIn, leTop, leBot,
              reIn, reOut, reTop, reBot, lbIn, lbPk, lbOut, rbIn, rbPk, rbOut,
-             lAlar, rAlar, nasion, noseTip, ulip, llip, stomU, stomD, eyeMid };
+             lAlar, rAlar, nasion, noseTip, ulip, llip, stomU, stomD, eyeMid,
+             lTemple, rTemple, lJaw, rJaw, lChin, rChin };
   m._W = W; m._H = H;
 
   return m;
@@ -933,6 +998,159 @@ function buildReport(m) {
       ${Math.abs(m.midDevPct) <= 2 ? bdg('Centered', 'ok') : bdg('Deviation', 'warn')}
     </div>
     <div class="sub">Conf: DETECTED · Directional lighting inflates apparent asymmetry.</div>
+    <div class="mrow">
+      <span class="mname">Brow peak asymmetry</span>
+      <span class="mval">${f1(m.browSymm)}%</span>
+      <span class="mcanon">≤4%</span>
+      ${m.browSymm <= 4 ? bdg('Symmetric', 'ok') : bdg('Asymmetry', 'warn')}
+    </div>
+    <div class="mrow">
+      <span class="mname">Jaw angle asymmetry</span>
+      <span class="mval">${f1(m.jawSymm)}%</span>
+      <span class="mcanon">≤4%</span>
+      ${m.jawSymm <= 4 ? bdg('Symmetric', 'ok') : bdg('Asymmetry', 'warn')}
+    </div>
+    <div class="mrow">
+      <span class="mname">Mouth corner asymmetry</span>
+      <span class="mval">${f1(m.mouthSymm)}%</span>
+      <span class="mcanon">≤4%</span>
+      ${m.mouthSymm <= 4 ? bdg('Symmetric', 'ok') : bdg('Asymmetry', 'warn')}
+    </div>
+  </div>
+
+  <!-- FACIAL WIDTH-TO-HEIGHT RATIO (fWHR) -->
+  <div class="card">
+    <div class="card-head">Facial Width-to-Height Ratio (fWHR)</div>
+    <div class="mrow">
+      <span class="mname">fWHR (bizygomatic ÷ nasion-to-lip height)</span>
+      <span class="mval">${f2(m.fWHR)}</span>
+      <span class="mcanon">F: 1.5–1.7 · M: 1.9–2.1</span>
+      ${m.fWHR <= 1.7 ? bdg('Feminine range', 'ok') : m.fWHR <= 1.9 ? bdg('Androgynous', 'warn') : bdg('Masculine range', 'off')}
+    </div>
+    <div class="sub">One of the strongest dimorphism markers with robust evidence. Lower fWHR = more feminine-typical. Nasion-to-upper-lip height normalized by cheekbone width.</div>
+  </div>
+
+  <!-- JAW TAPER RATIO -->
+  <div class="card">
+    <div class="card-head">Jaw Taper Ratio</div>
+    <div class="mrow">
+      <span class="mname">Bigonial ÷ bizygomatic width (jaw taper)</span>
+      <span class="mval">${f2(m.jawTaper)}</span>
+      <span class="mcanon">F: 0.73–0.80 · M: 0.83–0.92</span>
+      ${m.jawTaper <= 0.80 ? bdg('Feminine taper', 'ok') : m.jawTaper <= 0.83 ? bdg('Neutral', 'warn') : bdg('Wide jaw', 'off')}
+    </div>
+    <div class="sub">Conf: DETECTED · Jaw angle width ÷ cheekbone width. Highest-value single metric for FFS planning; directly maps to jaw contouring and chin implant decisions.</div>
+  </div>
+
+  <!-- PALPEBRAL FISSURE -->
+  <div class="card">
+    <div class="card-head">Eye Opening (Palpebral Fissure)</div>
+    <div class="mrow">
+      <span class="mname">Average eye height (pixels)</span>
+      <span class="mval">${f1(m.avgPalpH)}</span>
+      <span class="mcanon">9–12mm range</span>
+      ${m.avgPalpH >= 9 * (m.avgEyeW / 30) && m.avgPalpH <= 12 * (m.avgEyeW / 30) ? bdg('Typical', 'ok') : bdg('Out of range', 'warn')}
+    </div>
+    <div class="mrow">
+      <span class="mname">Height-to-width ratio</span>
+      <span class="mval">${f2(m.palpRatio)}</span>
+      <span class="mcanon">~0.33 (1:3)</span>
+      ${Math.abs(m.palpRatio - 0.33) < 0.05 ? bdg('Typical', 'ok') : bdg('Off-ratio', 'warn')}
+    </div>
+    <div class="sub">Vertical eye opening as fraction of horizontal width. Larger relative opening = younger/more feminine appearance. Expression-sensitive; measure in neutral pose.</div>
+  </div>
+
+  <!-- BROW POSITION AND ARCH -->
+  <div class="card">
+    <div class="card-head">Brow Position & Arch</div>
+    <div class="mrow">
+      <span class="mname">Brow height above orbital rim (avg, pixels)</span>
+      <span class="mval">${f1(m.avgBrowH)}</span>
+      <span class="mcanon">F: 10–15mm · M: 0–5mm</span>
+      ${m.avgBrowH >= 10 * (m.avgEyeW / 30) ? bdg('Feminine-elevated', 'ok') : m.avgBrowH >= 5 * (m.avgEyeW / 30) ? bdg('Neutral', 'warn') : bdg('At/below rim', 'off')}
+    </div>
+    <div class="mrow">
+      <span class="mname">Left brow arch position</span>
+      <span class="mval">${pct(m.lArch * 100)}</span>
+      <span class="mcanon">60–70% from inner</span>
+      ${devBdg(m.lArch * 100, 65, 10)}
+    </div>
+    <div class="mrow">
+      <span class="mname">Right brow arch position</span>
+      <span class="mval">${pct(m.rArch * 100)}</span>
+      <span class="mcanon">60–70% from inner</span>
+      ${devBdg(m.rArch * 100, 65, 10)}
+    </div>
+    <div class="sub">High arch (peak 60–70% from inner brow, above lateral limbus) is strongest single brow dimorphism signal. Both height and horizontal position matter.</div>
+  </div>
+
+  <!-- NASAL PROPORTIONS -->
+  <div class="card">
+    <div class="card-head">Nasal Width Proportions</div>
+    <div class="mrow">
+      <span class="mname">Alar width ÷ intercanthal distance</span>
+      <span class="mval">${f2(m.alarIcdR)}</span>
+      <span class="mcanon">0.9–1.1</span>
+      ${Math.abs(m.alarIcdR - 1.0) <= 0.1 ? bdg('Canonical', 'ok') : Math.abs(m.alarIcdR - 1.0) <= 0.2 ? bdg('Slight variance', 'warn') : bdg('Off-canon', 'off')}
+    </div>
+    <div class="mrow">
+      <span class="mname">Alar width % of bizygomatic</span>
+      <span class="mval">${pct((m.alarW / m.bizWidth) * 100)}</span>
+      <span class="mcanon">24–26%</span>
+      ${devBdg((m.alarW / m.bizWidth) * 100, 25, 5)}
+    </div>
+    <div class="sub">Narrower nose proportionally reads as more feminine-typical. Frontal only — profile (dorsum, projection, nasolabial angle) not assessable.</div>
+  </div>
+
+  <!-- PHILTRUM & CHIN -->
+  <div class="card">
+    <div class="card-head">Philtrum Length & Chin</div>
+    <div class="mrow">
+      <span class="mname">Philtrum length (subnasale → upper lip, pixels)</span>
+      <span class="mval">${f1(m.philtrum)}</span>
+      <span class="mcanon">11–13mm ideal</span>
+      ${m.philtrum >= 11 * (m.avgEyeW / 30) && m.philtrum <= 13 * (m.avgEyeW / 30) ? bdg('Ideal', 'ok') : m.philtrum > 13 * (m.avgEyeW / 30) ? bdg('Long (reduced lip show)', 'warn') : bdg('Short', 'info')}
+    </div>
+    <div class="sub">Longer philtrum = less visible upper lip at rest. Lip-lift (philtrum shortening) is common FFS; shortening by 2–4mm significantly increases perceived lip fullness.</div>
+    <div class="mrow">
+      <span class="mname">Chin width taper (chin ÷ bigonial width)</span>
+      <span class="mval">${f2(m.chinTaper)}</span>
+      <span class="mcanon">F: 0.45–0.55</span>
+      ${m.chinTaper >= 0.45 && m.chinTaper <= 0.55 ? bdg('Feminine taper', 'ok') : m.chinTaper < 0.45 ? bdg('Narrow chin', 'warn') : bdg('Wide/square chin', 'off')}
+    </div>
+    <div class="mrow">
+      <span class="mname">Chin height % of lower third</span>
+      <span class="mval">${pct(m.chinHRatio * 100)}</span>
+      <span class="mcanon">45–55%</span>
+      ${devBdg(m.chinHRatio * 100, 50, 10)}
+    </div>
+    <div class="sub">Tapered, moderate-height chin reads feminine. Square, prominent, or overly tall chin reads masculine and is major FFS target.</div>
+  </div>
+
+  <!-- LIP PROPORTIONS (EXPANDED) -->
+  <div class="card">
+    <div class="card-head">Lip Proportions (Expanded)</div>
+    <div class="mrow">
+      <span class="mname">Upper : lower vermilion ratio</span>
+      <span class="mval">${f2(m.lipRatio)}</span>
+      <span class="mcanon">1:1.5 to 1:2.0</span>
+      ${devBdg(m.lipRatio, 0.60, 20)}
+    </div>
+    <div class="sub">Lower lip should be 1.5–2× fuller than upper. Natural ratio; don't over-augment upper.</div>
+    <div class="mrow">
+      <span class="mname">Mouth width ÷ alar base width</span>
+      <span class="mval">${f2(m.mouthWAlarR)}</span>
+      <span class="mcanon">1.3–1.5</span>
+      ${m.mouthWAlarR >= 1.3 && m.mouthWAlarR <= 1.5 ? bdg('Canonical', 'ok') : m.mouthWAlarR < 1.3 ? bdg('Narrow mouth', 'warn') : bdg('Wide mouth', 'off')}
+    </div>
+    <div class="sub">Mouth slightly wider than alar base. Very wide mouth reads less refined.</div>
+    <div class="mrow">
+      <span class="mname">Total lip height % of lower third</span>
+      <span class="mval">${pct(m.lipHeightRatio * 100)}</span>
+      <span class="mcanon">18–22%</span>
+      ${m.lipHeightRatio * 100 >= 18 && m.lipHeightRatio * 100 <= 22 ? bdg('Ideal', 'ok') : bdg('Out of range', 'warn')}
+    </div>
+    <div class="sub">Combined upper + lower vermilion as % of lower face height. Too much lip height reads unnatural.</div>
   </div>
 
   <!-- DIMORPHISM -->
@@ -959,28 +1177,40 @@ function buildReport(m) {
 function buildDimorphism(m) {
   const rows = [
     {
+      name: 'Jaw taper ratio (most predictive)',
+      val:  m.jawTaper <= 0.80 ? 'Feminine taper' : m.jawTaper <= 0.83 ? 'Neutral' : 'Masculine/wide',
+      cls:  m.jawTaper <= 0.80 ? 'ok' : m.jawTaper <= 0.83 ? 'warn' : 'off',
+      note: 'Highest single-value FFS planning metric: jaw angle ÷ cheekbone width. Drives chin contouring, jaw implant, and buccal fat strategies.',
+    },
+    {
+      name: 'Facial width-to-height ratio (fWHR)',
+      val:  m.fWHR <= 1.7 ? 'Feminine range' : m.fWHR <= 1.9 ? 'Androgynous' : 'Masculine range',
+      cls:  m.fWHR <= 1.7 ? 'ok' : m.fWHR <= 1.9 ? 'warn' : 'off',
+      note: 'Strong evidence-based dimorphism marker. Lower ratio (1.5–1.7) = female-typical; higher (1.9–2.1) = male-typical.',
+    },
+    {
       name: 'Brow-eye distance',
       val:  m.bedFrac >= 0.40 ? 'Feminine range' : m.bedFrac >= 0.25 ? 'Neutral' : 'Masculine range',
       cls:  m.bedFrac >= 0.40 ? 'ok' : m.bedFrac >= 0.25 ? 'warn' : 'off',
-      note: 'Largest brow-eye gap = strongest single frontal femininity signal',
+      note: 'Strongest single frontal brow signal. Gap between brow peak and eye top; ≥0.40× eye width = feminine.',
     },
     {
       name: 'Brow arch position',
       val:  m.lArch > 0.55 ? 'Lateral arch (fem)' : 'Flat/medial (masc)',
       cls:  m.lArch > 0.55 ? 'ok' : 'off',
-      note: 'High lateral arch is a primary feminine brow cue',
+      note: 'Peak at 60–70% from inner brow = high arch. Most lateral positioning = maximum feminine signal.',
     },
     {
       name: 'Canthal tilt',
       val:  m.avgTilt >= 1 ? `Positive (avg ${sgn(m.avgTilt)})` : 'Neutral / negative',
       cls:  m.avgTilt >= 1 ? 'ok' : 'warn',
-      note: 'Not strongly dimorphic; positive tilt is favorable across sexes',
+      note: 'Moderate dimorphism signal; +3–5° optimal. Negative tilt reads masculine.',
     },
     {
       name: 'Eye aspect ratio',
       val:  m.avgAR >= 0.30 ? 'Higher (fem-leaning)' : 'Lower (neutral/masc)',
       cls:  m.avgAR >= 0.30 ? 'ok' : 'warn',
-      note: 'Slightly larger vertical eye opening trends feminine',
+      note: 'Taller relative to width = more feminine; neoteny signal. Weaker than jaw/fWHR markers.',
     },
   ];
   return rows.map(r => `
@@ -992,11 +1222,35 @@ function buildDimorphism(m) {
 function buildPresNotes(m) {
   const notes = [];
 
+  if (m.jawTaper > 0.83) {
+    notes.push({
+      lbl: 'Jaw Width — Surgical Priority',
+      col: 'var(--red)',
+      txt: `Jaw taper ratio (${f2(m.jawTaper)}) reads in the masculine range (>0.83). This is the single highest-impact FFS target. Buccal fat removal, jaw contouring (reduction of gonial angles/body), and/or chin implant positioning can shift this dramatically. This metric alone often justifies FFS consultation.`
+    });
+  }
+
+  if (m.fWHR > 1.9) {
+    notes.push({
+      lbl: 'Face Width — Structural Signal',
+      col: 'var(--amber)',
+      txt: `Facial width-to-height ratio (${f2(m.fWHR)}) reads masculine-typical (>1.9). Cheekbone-focused FFS (malar implants, cheekbone shaping) raises the denominator and increases perceived width, so standalone width reduction is not typically an FFS lever; the height of the lower face is the more actionable denominator to address.`
+    });
+  }
+
   if (m.bedFrac < 0.40) {
     notes.push({
-      lbl: 'Brow — Highest Priority',
-      col: 'var(--red)',
-      txt: `Brow-eye distance (${f2(m.bedFrac)}× eye-width) reads in the masculine-coded range. Reshaping toward a higher arch — with peak around 60–65% from the inner end — and opening the brow-to-eye space is the single highest-yield non-surgical intervention available. Professional brow mapping before any threading or tinting is recommended.`
+      lbl: 'Brow — High Priority',
+      col: 'var(--amber)',
+      txt: `Brow-eye distance (${f2(m.bedFrac)}× eye-width) reads in the masculine-coded range. Reshaping toward a higher arch — with peak around 60–65% from the inner end — and opening the brow-to-eye space is high-yield non-surgical. Professional brow mapping before threading/tinting. Brow lift is an FFS option if contouring is also pursued.`
+    });
+  }
+
+  if (m.chinTaper > 0.55 || m.chinTaper < 0.45) {
+    notes.push({
+      lbl: 'Chin Taper',
+      col: 'var(--amber)',
+      txt: `Chin width taper (${f2(m.chinTaper)}) is ${m.chinTaper > 0.55 ? 'wide/square (masculine-coded)' : 'narrow'}. Chin shape strongly influences jaw perception. Wide chin benefits from contouring; narrow chin may benefit from subtle augmentation for balance.`
     });
   }
 
@@ -1005,6 +1259,14 @@ function buildPresNotes(m) {
       lbl: 'Brow Arch Shape',
       col: 'var(--amber)',
       txt: `Brow peak sits at ${pct(((m.lArch + m.rArch)/2)*100)} from inner end — lower than the feminine ideal of ~65%. Removing hair from the underside of the outer third shifts the apparent peak laterally without reducing overall brow height.`
+    });
+  }
+
+  if (m.philtrum > 13 * (m.avgEyeW / 30)) {
+    notes.push({
+      lbl: 'Philtrum Length — Lip Enhancement',
+      col: 'var(--amber)',
+      txt: `Philtrum (${f1(m.philtrum)} pixels, ~${(m.philtrum / (m.avgEyeW / 30)).toFixed(1)}mm) reads longer than ideal (<13mm). This reduces visible upper lip at rest. Lip-lift (philtrum shortening by 2–4mm via surgical incision above the lip) is a direct, impactful FFS procedure. Reduces need for lip augmentation.`
     });
   }
 
@@ -1018,9 +1280,25 @@ function buildPresNotes(m) {
 
   if (m.lipRatio < 0.50) {
     notes.push({
-      lbl: 'Lip Volume',
+      lbl: 'Lip Volume — Upper Lip',
       col: 'var(--amber)',
-      txt: `Upper vermilion reads thin (ratio ${f2(m.lipRatio)}, canon ~0.60). Overlining just at the Cupid's bow peak — not the full border — and applying a lighter or glossy center on the upper lip adds apparent volume. Avoid lining the full upper border, which looks artificial.`
+      txt: `Upper vermilion reads thin (ratio ${f2(m.lipRatio)}, canon ~0.60). Overlining just at the Cupid's bow peak — not the full border — and applying a lighter or glossy center on the upper lip adds apparent volume. Avoid lining the full upper border, which looks artificial. If pursuing FFS, consider subtle upper lip augmentation.`
+    });
+  }
+
+  if (m.mouthWAlarR < 1.3 || m.mouthWAlarR > 1.5) {
+    notes.push({
+      lbl: 'Mouth Width Proportion',
+      col: 'var(--amber)',
+      txt: `Mouth width ratio (${f2(m.mouthWAlarR)}) ${m.mouthWAlarR < 1.3 ? 'is narrow relative to alar base' : 'is wide relative to alar base'}. Canonical is 1.3–1.5. Smile shape and lateral commissure positioning can be refined via makeup or, surgically, via lateral commissure elevation.`
+    });
+  }
+
+  if (m.browSymm > 4 || m.jawSymm > 4) {
+    notes.push({
+      lbl: 'Bilateral Asymmetry',
+      col: 'var(--amber)',
+      txt: `Brow and/or jaw asymmetry detected (>${f1(Math.max(m.browSymm, m.jawSymm))}%). This is common and often directional-lighting-dependent. If asymmetry is real (confirm from multiple angles), jaw/chin contouring can be weighted toward the off-side, or asymmetric brow shaping can help balance.`
     });
   }
 
