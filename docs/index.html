@@ -406,7 +406,8 @@ let showMeasurements = {
 // ════════════════════════════════════════════════════════════════
 const DRAGGABLE = {
   trich:   L.TRICHION,  glab:    L.GLABELLA,
-  subnas:  L.SUBNASALE, ment:    L.MENTON,
+  nasion:  L.NASION,    subnas:  L.SUBNASALE,
+  ment:    L.MENTON,
   ulip:    L.UPPER_LIP, llip:    L.LOWER_LIP,
   leIn:    L.LE_IN,     leOut:   L.LE_OUT,
   reIn:    L.RE_IN,     reOut:   L.RE_OUT,
@@ -418,7 +419,7 @@ const DRAGGABLE = {
 // Which toggle group each draggable point belongs to. Points whose
 // group is hidden are neither drawn nor grabbable.
 const POINT_GROUP = {
-  trich: 'thirds', glab: 'thirds', subnas: 'thirds', ment: 'thirds',
+  trich: 'thirds', glab: 'thirds', nasion: 'thirds', subnas: 'thirds', ment: 'thirds',
   ulip:  'thirds', llip:  'thirds',
   leIn:  'eyes',   leOut: 'eyes',  reIn:  'eyes',   reOut: 'eyes',
   lbPk:  'brows',  rbPk:  'brows',
@@ -981,6 +982,7 @@ function buildReport(m) {
     <div class="pnote"><span class="pnlabel" style="color:var(--teal)">THIRDS (green dots)</span>
       <br><b>Trichion</b> — very top of forehead at the hairline centre. If hair is pulled back, place it at the first visible scalp skin.
       <br><b>Glabella</b> — the bony bump between the brows, right on the midline.
+      <br><b>Nasion</b> — top of the nose bridge, where the nose meets the forehead. Also the top of the fWHR height span.
       <br><b>Subnasale</b> — where the base of the nose (columella) meets the upper lip, on the midline.
       <br><b>Upper lip</b> — the centre peak of the top lip (Cupid's bow peak), labrale superius.
       <br><b>Lower lip</b> — the centre of the lower lip's fullest point, labrale inferius.
@@ -1004,7 +1006,7 @@ function buildReport(m) {
 
     <div class="pnote"><span class="pnlabel" style="color:#3ecfb8">fWHR — Facial Width-to-Height Ratio</span>
       <br>Width = BIZ (bizygomatic, violet dots). Height = vertical distance from the <b>nasion</b> (nose bridge top, auto-detected) down to the <b>upper lip</b> (green Thirds dot at the Cupid's bow peak).
-      <br>To change the fWHR reading: drag the <b>BIZ dots</b> inward/outward to adjust width, or drag the <b>upper lip dot</b> up/down to adjust height. The nasion is not draggable — it follows the nose bridge automatically.
+      <br>To change the fWHR reading: drag the <b>BIZ dots</b> inward/outward to adjust width, drag the <b>nasion dot</b> up/down to move the top of the height span, or drag the <b>upper lip dot</b> up/down to adjust the bottom.
       <br>A teal bracket on the left of the photo shows the height span; the BIZ violet line shows the width span.
     </div>
 
