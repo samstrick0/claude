@@ -800,15 +800,50 @@ function drawCanvas(canvas, img, lm, m) {
   });
   ctx.restore();
 
+  // ── Bizygomatic width (cheekbone to cheekbone) ───────────────
+  if (q.lTemple && q.rTemple) {
+    const bizY = s((q.lTemple.y + q.rTemple.y) / 2);
+    ctx.save();
+    ctx.strokeStyle = '#9b8dff'; ctx.lineWidth = 1.5; ctx.globalAlpha = 0.75;
+    ctx.beginPath(); ctx.moveTo(s(q.lTemple.x), bizY); ctx.lineTo(s(q.rTemple.x), bizY); ctx.stroke();
+    [q.lTemple.x, q.rTemple.x].forEach(x => {
+      ctx.beginPath(); ctx.moveTo(s(x), bizY - 5); ctx.lineTo(s(x), bizY + 5); ctx.stroke();
+    });
+    ctx.textAlign = 'center';
+    ctx.font = `${Math.max(9, Math.round(9 * sc))}px -apple-system, sans-serif`;
+    ctx.fillStyle = '#9b8dff';
+    ctx.fillText(`BIZ`, s((q.lTemple.x + q.rTemple.x) / 2), bizY - 8);
+    ctx.restore();
+  }
+
+  // ── Jaw width (bigonial) ───────────────────────────────────
+  if (q.lJaw && q.rJaw) {
+    const jawY = s((q.lJaw.y + q.rJaw.y) / 2);
+    ctx.save();
+    ctx.strokeStyle = '#e05252'; ctx.lineWidth = 1.5; ctx.globalAlpha = 0.75;
+    ctx.beginPath(); ctx.moveTo(s(q.lJaw.x), jawY); ctx.lineTo(s(q.rJaw.x), jawY); ctx.stroke();
+    [q.lJaw.x, q.rJaw.x].forEach(x => {
+      ctx.beginPath(); ctx.moveTo(s(x), jawY - 5); ctx.lineTo(s(x), jawY + 5); ctx.stroke();
+    });
+    ctx.textAlign = 'center';
+    ctx.font = `${Math.max(9, Math.round(9 * sc))}px -apple-system, sans-serif`;
+    ctx.fillStyle = '#e05252';
+    ctx.fillText(`JAW`, s((q.lJaw.x + q.rJaw.x) / 2), jawY + 14);
+    ctx.restore();
+  }
+
   // ── Landmark dots ────────────────────────────────────────────
   const dots = {
     '#3fbf72': [q.glab, q.subnas, q.ment, q.ulip, q.llip,
                 q.leIn, q.leOut, q.reIn, q.reOut,
                 q.lbPk, q.rbPk, q.lAlar, q.rAlar, q.noseTip],
     '#f0a030': [q.trich],
+    '#9b8dff': [q.lTemple, q.rTemple],  // bizygomatic
+    '#e05252': [q.lJaw, q.rJaw],         // jaw angles
   };
   Object.entries(dots).forEach(([col, pts]) => {
     pts.forEach(pt => {
+      if (!pt) return;
       ctx.save();
       ctx.fillStyle = col; ctx.globalAlpha = 0.9;
       ctx.beginPath(); ctx.arc(s(pt.x), s(pt.y), Math.max(3, 3 * sc), 0, Math.PI * 2); ctx.fill();
