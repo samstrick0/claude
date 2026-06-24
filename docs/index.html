@@ -754,9 +754,9 @@ function calcMetrics(lm, W, H) {
   m.mouthSymm  = Math.abs(p(lm, L.L_MOUTH).x - (2 * eyeMid.x - p(lm, L.R_MOUTH).x)) / m.bizWidth * 100;
 
   // ── Store refs for annotation ──────────────────────────────────
-  m._pts = { trich, glab, subnas, ment, leOut, leIn, leTop, leBot,
+  m._pts = { trich, glab, nasion, subnas, ment, leOut, leIn, leTop, leBot,
              reIn, reOut, reTop, reBot, lbIn, lbPk, lbOut, rbIn, rbPk, rbOut,
-             lAlar, rAlar, nasion, noseTip, ulip, llip, stomU, stomD, eyeMid,
+             lAlar, rAlar, noseTip, ulip, llip, stomU, stomD, lMouth, rMouth, eyeMid,
              lTemple, rTemple, lJaw, rJaw, lChin, rChin };
   m._W = W; m._H = H;
 
