@@ -968,15 +968,7 @@ function drawCanvas(canvas, img, lm, m) {
   };
   // Draggable landmark dots — hidden when their group is toggled off
   const CHIN_COL = '#c8ccd4';  // light gray — matches the placement guide
-  Object.keys(DRAGGABLE).forEach(key => {
-    const grp = POINT_GROUP[key];
-    if (grp && !showMeasurements[grp]) return;
-    const col = key === 'trich' ? '#f0a030'
-              : (key === 'lChin' || key === 'rChin') ? CHIN_COL
-              : '#3fbf72';
-    drawDot(q[key], col);
-  });
-  // Bizygomatic / jaw estimated dots — part of the Jaw group
+
   const dotLabel = (pt, txt, col) => {
     if (!pt) return;
     ctx.save();
@@ -986,15 +978,37 @@ function drawCanvas(canvas, img, lm, m) {
     ctx.fillText(txt, s(pt.x), s(pt.y) - Math.max(6, 6 * sc));
     ctx.restore();
   };
+
+  // Label map for all draggable points
+  const pointLabels = {
+    trich: 'HAIR', glab: 'BROW', nasion: 'NASION', subnas: 'NOSE', ment: 'CHIN',
+    ulip: 'ULIP', llip: 'LLIP', stomU: 'STOM↑', stomD: 'STOM↓',
+    leIn: 'LE↶', leOut: 'LE↷', leTop: 'LE↑', leBot: 'LE↓',
+    reIn: 'RE↶', reOut: 'RE↷', reTop: 'RE↑', reBot: 'RE↓',
+    lbPk: 'BROW↑', rbPk: 'BROW↑', lbIn: 'BROW↶', lbOut: 'BROW↷', rbIn: 'BROW↶', rbOut: 'BROW↷',
+    lAlar: 'ALAR', rAlar: 'ALAR', noseTip: 'TIP',
+    lChin: 'CHIN', rChin: 'CHIN', lMouth: 'MOUTH', rMouth: 'MOUTH'
+  };
+
+  Object.keys(DRAGGABLE).forEach(key => {
+    const grp = POINT_GROUP[key];
+    if (grp && !showMeasurements[grp]) return;
+    const col = key === 'trich' ? '#f0a030'
+              : (key === 'lChin' || key === 'rChin') ? CHIN_COL
+              : (key === 'lMouth' || key === 'rMouth') ? '#f5a623'
+              : '#3fbf72';
+    drawDot(q[key], col);
+    if (pointLabels[key]) {
+      dotLabel(q[key], pointLabels[key], col);
+    }
+  });
+
+  // Bizygomatic / jaw estimated dots — part of the Jaw group
   if (showMeasurements.jaw) {
     drawDot(q.lTemple, '#9b8dff'); drawDot(q.rTemple, '#9b8dff');
     drawDot(q.lJaw, '#e05252');    drawDot(q.rJaw, '#e05252');
     dotLabel(q.lTemple, 'CHEEK', '#9b8dff'); dotLabel(q.rTemple, 'CHEEK', '#9b8dff');
     dotLabel(q.lJaw, 'JAW', '#e05252');      dotLabel(q.rJaw, 'JAW', '#e05252');
-    dotLabel(q.lChin, 'CHIN', CHIN_COL);     dotLabel(q.rChin, 'CHIN', CHIN_COL);
-    // Mouth corners (×2)
-    drawDot(q.lMouth, '#f5a623'); drawDot(q.rMouth, '#f5a623');
-    dotLabel(q.lMouth, 'MOUTH', '#f5a623'); dotLabel(q.rMouth, 'MOUTH', '#f5a623');
     // Mouth width bracket
     const mouthTop = s((q.lMouth.y + q.rMouth.y) / 2) - 30;
     ctx.save();
