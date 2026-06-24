@@ -600,13 +600,22 @@ function calcMetrics(lm, W, H) {
   m.lipChin    = ment.y   - ulip.y;
   m.ltRatio    = m.lipChin / (m.philtrum || 1);  // canon ~2.0
 
-  // ── Cheekbone / Bizygomatic ────────────────────────────────────
-  const lTemple = p(lm, L.L_TEMPLE), rTemple = p(lm, L.R_TEMPLE);
-  m.bizWidth = dx(lTemple, rTemple);  // cheekbone width estimate
+  // ── Cheekbone / Bizygomatic (estimate from mouth width) ────────
+  // Bizygomatic ~120% of mouth width, positioned at upper face level
+  const lMouth = p(lm, L.L_MOUTH), rMouth = p(lm, L.R_MOUTH);
+  const mouthW = dx(lMouth, rMouth);
+  const faceCenterX = (leIn.x + reIn.x) / 2;
+  const bizWidthEst = mouthW * 1.2;
+  const lTemple = { x: faceCenterX - bizWidthEst / 2, y: (leTop.y + lMouth.y) / 2 };
+  const rTemple = { x: faceCenterX + bizWidthEst / 2, y: (reTop.y + rMouth.y) / 2 };
+  m.bizWidth = bizWidthEst;
 
-  // ── Jaw landmarks ──────────────────────────────────────────────
-  const lJaw = p(lm, L.L_JAW), rJaw = p(lm, L.R_JAW);
-  m.biJaw = dx(lJaw, rJaw);  // jaw angle to jaw angle
+  // ── Jaw landmarks (estimate below mouth) ──────────────────────
+  // Jaw angles are below and slightly outside mouth corners
+  const jawWidthEst = mouthW * 1.05;
+  const lJaw = { x: faceCenterX - jawWidthEst / 2, y: ment.y - ment.y * 0.25 };
+  const rJaw = { x: faceCenterX + jawWidthEst / 2, y: ment.y - ment.y * 0.25 };
+  m.biJaw = jawWidthEst;
   m.jawTaper = m.biJaw / m.bizWidth;  // 0.73–0.80 fem, 0.83–0.92 masc
 
   // ── Facial Width-to-Height Ratio (fWHR) ────────────────────────
