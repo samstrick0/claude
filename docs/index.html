@@ -657,10 +657,11 @@ function calcMetrics(lm, W, H) {
   m.jawTaper = m.biJaw / m.bizWidth;  // 0.73–0.80 fem, 0.83–0.92 masc
 
   // ── Facial Width-to-Height Ratio (fWHR) ────────────────────────
+  // Standard definition: bizygomatic width ÷ nasion-to-menton height
   const nasionY = nasion.y;
-  const ulipY   = ulip.y;
-  const nasFWHRHeight = ulipY - nasionY;
-  m.fWHR = m.bizWidth / nasFWHRHeight;  // 1.5–1.7 fem, 1.9–2.1 masc
+  const mentY   = ment.y;
+  const fWHRHeight = mentY - nasionY;  // Full lower-face height
+  m.fWHR = m.bizWidth / fWHRHeight;  // 1.5–1.7 fem, 1.9–2.1 masc
 
   // ── Palpebral fissure (eye opening) details ─────────────────────
   m.lPalpH = m.lEyeH;  // already have
@@ -887,11 +888,11 @@ function drawCanvas(canvas, img, lm, m) {
     ctx.restore();
   }
 
-  // ── fWHR bracket (left side: nasion → upper lip height) ──────
-  if (q.nasion && q.ulip && q.lTemple) {
+  // ── fWHR bracket (left side: nasion → menton full height) ──────
+  if (q.nasion && q.ment && q.lTemple) {
     const bx2   = Math.max(s(q.lTemple.x) - 14, 4);
     const hTop  = s(q.nasion.y);
-    const hBot  = s(q.ulip.y);
+    const hBot  = s(q.ment.y);
     const hMid  = (hTop + hBot) / 2;
     ctx.save();
     ctx.strokeStyle = '#3ecfb8'; ctx.fillStyle = '#3ecfb8';
@@ -1005,9 +1006,9 @@ function buildReport(m) {
     </div>
 
     <div class="pnote"><span class="pnlabel" style="color:#3ecfb8">fWHR — Facial Width-to-Height Ratio</span>
-      <br>Width = BIZ (bizygomatic, violet dots). Height = vertical distance from the <b>nasion</b> (nose bridge top, auto-detected) down to the <b>upper lip</b> (green Thirds dot at the Cupid's bow peak).
-      <br>To change the fWHR reading: drag the <b>BIZ dots</b> inward/outward to adjust width, drag the <b>nasion dot</b> up/down to move the top of the height span, or drag the <b>upper lip dot</b> up/down to adjust the bottom.
-      <br>A teal bracket on the left of the photo shows the height span; the BIZ violet line shows the width span.
+      <br>Width = BIZ (bizygomatic, violet dots). Height = vertical distance from the <b>nasion</b> (nose bridge top) down to the <b>menton</b> (chin point, bottom of face). This is the full lower-face height span.
+      <br>To change the fWHR reading: drag the <b>BIZ dots</b> inward/outward to adjust width, drag the <b>nasion dot</b> up/down to move the top of the height span, or drag the <b>menton dot</b> (bottom of chin) up/down to adjust the bottom.
+      <br>A teal bracket on the left of the photo shows the height span (nasion to menton); the BIZ violet line shows the width span.
     </div>
 
     <div class="pnote"><span class="pnlabel" style="color:#9b8dff">BIZ — Bizygomatic (violet dots)</span>
@@ -1180,12 +1181,12 @@ function buildReport(m) {
   <div class="card">
     <div class="card-head">Facial Width-to-Height Ratio (fWHR)</div>
     <div class="mrow">
-      <span class="mname">fWHR (bizygomatic ÷ nasion-to-lip height)</span>
+      <span class="mname">fWHR (bizygomatic ÷ nasion-to-menton height)</span>
       <span class="mval">${f2(m.fWHR)}</span>
       <span class="mcanon">F: 1.5–1.7 · M: 1.9–2.1</span>
       ${m.fWHR <= 1.7 ? bdg('Feminine range', 'ok') : m.fWHR <= 1.9 ? bdg('Androgynous', 'warn') : bdg('Masculine range', 'off')}
     </div>
-    <div class="sub">One of the strongest dimorphism markers with robust evidence. Lower fWHR = more feminine-typical. Nasion-to-upper-lip height normalized by cheekbone width.</div>
+    <div class="sub">One of the strongest dimorphism markers with robust evidence. Lower fWHR = more feminine-typical. Standard definition: cheekbone width ÷ full lower-face height (nasion bridge to chin).</div>
   </div>
 
   <!-- JAW TAPER RATIO -->
