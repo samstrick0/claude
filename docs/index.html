@@ -885,6 +885,27 @@ function drawCanvas(canvas, img, lm, m) {
     ctx.fillText(`JAW`, s((q.lJaw.x + q.rJaw.x) / 2), jawY + 14);
     ctx.restore();
   }
+
+  // ── fWHR bracket (left side: nasion → upper lip height) ──────
+  if (q.nasion && q.ulip && q.lTemple) {
+    const bx2   = Math.max(s(q.lTemple.x) - 14, 4);
+    const hTop  = s(q.nasion.y);
+    const hBot  = s(q.ulip.y);
+    const hMid  = (hTop + hBot) / 2;
+    ctx.save();
+    ctx.strokeStyle = '#3ecfb8'; ctx.fillStyle = '#3ecfb8';
+    ctx.lineWidth = 2; ctx.globalAlpha = 0.8;
+    ctx.beginPath();
+    ctx.moveTo(bx2 + 8, hTop); ctx.lineTo(bx2, hTop);
+    ctx.moveTo(bx2, hTop); ctx.lineTo(bx2, hBot);
+    ctx.moveTo(bx2, hBot); ctx.lineTo(bx2 + 8, hBot);
+    ctx.stroke();
+    ctx.textAlign = 'right';
+    ctx.font = `bold ${Math.max(9, Math.round(9 * sc))}px -apple-system, sans-serif`;
+    ctx.fillText(`fWHR`, bx2 - 3, hMid - 5);
+    ctx.fillText(`${m.fWHR.toFixed(2)}`, bx2 - 3, hMid + 8);
+    ctx.restore();
+  }
   } // end jaw
 
   // ── Landmark dots (only for visible groups) ──────────────────
@@ -979,6 +1000,12 @@ function buildReport(m) {
     <div class="pnote"><span class="pnlabel" style="color:var(--amber)">ALAR (amber)</span>
       <br><b>Alar base (×2)</b> — the outermost point where the nostril meets the cheek skin, one per nostril.
       <br><b>Nose tip</b> — the most forward-projecting point of the nose (pronasale), on the midline.
+    </div>
+
+    <div class="pnote"><span class="pnlabel" style="color:#3ecfb8">fWHR — Facial Width-to-Height Ratio</span>
+      <br>Width = BIZ (bizygomatic, violet dots). Height = vertical distance from the <b>nasion</b> (nose bridge top, auto-detected) down to the <b>upper lip</b> (green Thirds dot at the Cupid's bow peak).
+      <br>To change the fWHR reading: drag the <b>BIZ dots</b> inward/outward to adjust width, or drag the <b>upper lip dot</b> up/down to adjust height. The nasion is not draggable — it follows the nose bridge automatically.
+      <br>A teal bracket on the left of the photo shows the height span; the BIZ violet line shows the width span.
     </div>
 
     <div class="pnote"><span class="pnlabel" style="color:#9b8dff">BIZ — Bizygomatic (violet dots)</span>
