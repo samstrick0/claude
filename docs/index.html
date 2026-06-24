@@ -310,6 +310,7 @@ body {
   <div class="topbar">
     <button class="btn" onclick="goBack()">← New</button>
     <span class="topbar-title">Analysis</span>
+    <button class="btn" id="edit-btn" onclick="toggleEdit()">Edit ✎</button>
     <button class="btn" onclick="saveImg()">Save ↗</button>
   </div>
 
@@ -364,6 +365,26 @@ let meshReady  = false;
 let initResolve = null;
 let isIniting  = false;
 let pendingImg = null;
+
+let currentLm  = null;
+let currentImg = null;
+let currentSc  = 1;
+let editMode   = false;
+let dragKey    = null;
+
+// ════════════════════════════════════════════════════════════════
+//  DRAGGABLE POINT MAP  (display key → landmark index)
+// ════════════════════════════════════════════════════════════════
+const DRAGGABLE = {
+  trich:   L.TRICHION,  glab:    L.GLABELLA,
+  subnas:  L.SUBNASALE, ment:    L.MENTON,
+  ulip:    L.UPPER_LIP, llip:    L.LOWER_LIP,
+  leIn:    L.LE_IN,     leOut:   L.LE_OUT,
+  reIn:    L.RE_IN,     reOut:   L.RE_OUT,
+  lbPk:    L.LB_PEAK,   rbPk:    L.RB_PEAK,
+  lAlar:   L.L_ALAR,    rAlar:   L.R_ALAR,
+  noseTip: L.NOSE_TIP,
+};
 
 // ════════════════════════════════════════════════════════════════
 //  UI
@@ -461,6 +482,8 @@ function onResults(results) {
 
   // Denormalize to pixel coords
   const lm = raw.map(p => ({ x: p.x * W, y: p.y * H, z: p.z }));
+  currentLm  = lm;
+  currentImg = img;
 
   step('Computing metrics…');
   const metrics = calcMetrics(lm, W, H);
@@ -591,6 +614,7 @@ function drawCanvas(canvas, img, lm, m) {
   const dW  = Math.min(window.innerWidth, 640);
   const dH  = Math.round(img.naturalHeight * dW / img.naturalWidth);
   const sc  = dW / img.naturalWidth;
+  currentSc = sc;
 
   canvas.width  = dW * dpr;
   canvas.height = dH * dpr;
@@ -1059,6 +1083,78 @@ function saveImg() {
     a.href = url; a.download = 'morphometric.jpg'; a.click();
   }
 }
+
+// ════════════════════════════════════════════════════════════════
+//  POINT EDITOR
+// ════════════════════════════════════════════════════════════════
+function toggleEdit() {
+  editMode = !editMode;
+  const btn = document.getElementById('edit-btn');
+  btn.textContent  = editMode ? 'Done ✓' : 'Edit ✎';
+  btn.style.color  = editMode ? 'var(--teal)' : '';
+  document.getElementById('result-canvas').style.cursor = editMode ? 'crosshair' : '';
+  if (!editMode) fullRedraw();
+}
+
+function fullRedraw() {
+  if (!currentLm || !currentImg) return;
+  const canvas  = document.getElementById('result-canvas');
+  const metrics = calcMetrics(currentLm, currentImg.naturalWidth, currentImg.naturalHeight);
+  drawCanvas(canvas, currentImg, currentLm, metrics);
+  document.getElementById('rpt').innerHTML = buildReport(metrics);
+}
+
+function canvasXY(e) {
+  const rect = document.getElementById('result-canvas').getBoundingClientRect();
+  const src  = e.touches ? e.touches[0] : e;
+  return { cx: src.clientX - rect.left, cy: src.clientY - rect.top };
+}
+
+function nearestDraggable(cx, cy) {
+  const HIT = 28;
+  let best = null, bestD = Infinity;
+  for (const [key, idx] of Object.entries(DRAGGABLE)) {
+    const pt = currentLm[idx];
+    const d  = Math.hypot(cx - pt.x * currentSc, cy - pt.y * currentSc);
+    if (d < HIT && d < bestD) { bestD = d; best = key; }
+  }
+  return best;
+}
+
+function onPointerDown(e) {
+  if (!editMode || !currentLm) return;
+  const { cx, cy } = canvasXY(e);
+  dragKey = nearestDraggable(cx, cy);
+  if (dragKey) e.preventDefault();
+}
+
+function onPointerMove(e) {
+  if (!editMode || !dragKey || !currentLm) return;
+  e.preventDefault();
+  const { cx, cy } = canvasXY(e);
+  currentLm[DRAGGABLE[dragKey]].x = cx / currentSc;
+  currentLm[DRAGGABLE[dragKey]].y = cy / currentSc;
+  // Fast canvas-only redraw while dragging
+  const canvas  = document.getElementById('result-canvas');
+  const metrics = calcMetrics(currentLm, currentImg.naturalWidth, currentImg.naturalHeight);
+  drawCanvas(canvas, currentImg, currentLm, metrics);
+}
+
+function onPointerUp() {
+  if (!dragKey) return;
+  dragKey = null;
+  fullRedraw(); // update metrics panel after drag ends
+}
+
+(function attachEditorListeners() {
+  const cv = document.getElementById('result-canvas');
+  cv.addEventListener('touchstart',  onPointerDown, { passive: false });
+  cv.addEventListener('touchmove',   onPointerMove, { passive: false });
+  cv.addEventListener('touchend',    onPointerUp);
+  cv.addEventListener('mousedown',   onPointerDown);
+  cv.addEventListener('mousemove',   onPointerMove);
+  cv.addEventListener('mouseup',     onPointerUp);
+})();
 
 // ════════════════════════════════════════════════════════════════
 //  INIT
