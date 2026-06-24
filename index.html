@@ -414,6 +414,7 @@ const DRAGGABLE = {
   lbPk:    L.LB_PEAK,   rbPk:    L.RB_PEAK,
   lAlar:   L.L_ALAR,    rAlar:   L.R_ALAR,
   noseTip: L.NOSE_TIP,
+  lChin:   L.L_CHIN,    rChin:   L.R_CHIN,
 };
 
 // Which toggle group each draggable point belongs to. Points whose
@@ -424,6 +425,7 @@ const POINT_GROUP = {
   leIn:  'eyes',   leOut: 'eyes',  reIn:  'eyes',   reOut: 'eyes',
   lbPk:  'brows',  rbPk:  'brows',
   lAlar: 'alar',   rAlar: 'alar',  noseTip: 'alar',
+  lChin: 'jaw',    rChin: 'jaw',
 };
 
 // ════════════════════════════════════════════════════════════════
@@ -1019,6 +1021,8 @@ function buildReport(m) {
 
     <div class="pnote"><span class="pnlabel" style="color:#e05252">JAW — Bigonial (red dots)</span>
       <br>The gonion: the angle of the jaw below and slightly in front of each earlobe, one per side. This is the most posterior-inferior point of the mandibular angle. On a front-facing photo it appears as the outermost point of the lower jaw, level with somewhere between the mouth and chin.
+      <br><b>Chin corners (light gray)</b> — the points at the lateral edges of the chin, where the chin contour meets the cheek/jaw outline. These define chin width. Drag them inward to narrow the chin or outward to widen it.
+
     </div>
   </div>
 
