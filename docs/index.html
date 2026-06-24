@@ -644,13 +644,19 @@ function calcMetrics(lm, W, H) {
   const mouthW = dx(lMouth, rMouth);
   const faceCenterX = (leIn.x + reIn.x) / 2;
   if (!jawPoints) {
-    const bizWidthEst = mouthW * 1.2;
-    const jawWidthEst = mouthW * 1.05;
+    // Seed widths from the outer-canthal (biocular) distance, which scales
+    // reliably with face width. Bizygomatic ≈ 1.35× biocular; bigonial ≈ 0.80×
+    // bizygomatic. Heights: cheekbone sits at mid-cheek (eye-bottom→subnasale),
+    // the gonial angle sits between the mouth and the chin tip.
+    const bizWidthEst = m.biocular * 1.35;
+    const jawWidthEst = bizWidthEst * 0.80;
+    const cheekY  = (leBot.y + subnas.y) / 2;
+    const gonialY = (lMouth.y + ment.y) / 2;
     jawPoints = {
-      lTemple: { x: faceCenterX - bizWidthEst / 2, y: (leTop.y + lMouth.y) / 2 },
-      rTemple: { x: faceCenterX + bizWidthEst / 2, y: (reTop.y + rMouth.y) / 2 },
-      lJaw:    { x: faceCenterX - jawWidthEst / 2, y: ment.y - ment.y * 0.25 },
-      rJaw:    { x: faceCenterX + jawWidthEst / 2, y: ment.y - ment.y * 0.25 },
+      lTemple: { x: faceCenterX - bizWidthEst / 2, y: cheekY },
+      rTemple: { x: faceCenterX + bizWidthEst / 2, y: cheekY },
+      lJaw:    { x: faceCenterX - jawWidthEst / 2, y: gonialY },
+      rJaw:    { x: faceCenterX + jawWidthEst / 2, y: gonialY },
     };
   }
   const lTemple = jawPoints.lTemple, rTemple = jawPoints.rTemple;
@@ -924,15 +930,31 @@ function drawCanvas(canvas, img, lm, m) {
     ctx.restore();
   };
   // Draggable landmark dots — hidden when their group is toggled off
+  const CHIN_COL = '#c8ccd4';  // light gray — matches the placement guide
   Object.keys(DRAGGABLE).forEach(key => {
     const grp = POINT_GROUP[key];
     if (grp && !showMeasurements[grp]) return;
-    drawDot(q[key], key === 'trich' ? '#f0a030' : '#3fbf72');
+    const col = key === 'trich' ? '#f0a030'
+              : (key === 'lChin' || key === 'rChin') ? CHIN_COL
+              : '#3fbf72';
+    drawDot(q[key], col);
   });
   // Bizygomatic / jaw estimated dots — part of the Jaw group
+  const dotLabel = (pt, txt, col) => {
+    if (!pt) return;
+    ctx.save();
+    ctx.fillStyle = col; ctx.globalAlpha = 0.95;
+    ctx.font = `bold ${Math.max(8, Math.round(8 * sc))}px -apple-system, sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.fillText(txt, s(pt.x), s(pt.y) - Math.max(6, 6 * sc));
+    ctx.restore();
+  };
   if (showMeasurements.jaw) {
     drawDot(q.lTemple, '#9b8dff'); drawDot(q.rTemple, '#9b8dff');
     drawDot(q.lJaw, '#e05252');    drawDot(q.rJaw, '#e05252');
+    dotLabel(q.lTemple, 'CHEEK', '#9b8dff'); dotLabel(q.rTemple, 'CHEEK', '#9b8dff');
+    dotLabel(q.lJaw, 'JAW', '#e05252');      dotLabel(q.rJaw, 'JAW', '#e05252');
+    dotLabel(q.lChin, 'CHIN', CHIN_COL);     dotLabel(q.rChin, 'CHIN', CHIN_COL);
   }
 
   // ── Legend ───────────────────────────────────────────────────
