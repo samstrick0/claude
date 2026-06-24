@@ -311,6 +311,11 @@ body {
     <button class="btn" onclick="goBack()">← New</button>
     <span class="topbar-title">Analysis</span>
     <button class="btn" id="edit-btn" onclick="toggleEdit()">Edit ✎</button>
+    <span id="zoom-controls" style="display:none; gap:4px; align-items:center;">
+      <button class="btn" style="padding:4px 6px; font-size:10px;" onclick="changeZoom(-0.2)">−</button>
+      <span id="zoom-label" style="font-size:10px; color:var(--text2); width:32px; text-align:center;">1x</span>
+      <button class="btn" style="padding:4px 6px; font-size:10px;" onclick="changeZoom(0.2)">+</button>
+    </span>
     <button class="btn" onclick="saveImg()">Save ↗</button>
   </div>
 
@@ -397,6 +402,10 @@ let dragKey    = null;
 // computed from the estimate; persists across redraws once dragged.
 let jawPoints  = null;
 
+let currentZoom = 1;      // 1.0 = 100%, 2.0 = 200%, etc.
+let zoomPanX   = 0;       // pan offset in canvas coords
+let zoomPanY   = 0;
+
 let showMeasurements = {
   thirds: true, eyes: true, brows: true, jaw: true, alar: true
 };
@@ -409,12 +418,16 @@ const DRAGGABLE = {
   nasion:  L.NASION,    subnas:  L.SUBNASALE,
   ment:    L.MENTON,
   ulip:    L.UPPER_LIP, llip:    L.LOWER_LIP,
-  leIn:    L.LE_IN,     leOut:   L.LE_OUT,
-  reIn:    L.RE_IN,     reOut:   L.RE_OUT,
+  leIn:    L.LE_IN,     leOut:   L.LE_OUT,    leTop:   L.LE_TOP,    leBot:   L.LE_BOT,
+  reIn:    L.RE_IN,     reOut:   L.RE_OUT,    reTop:   L.RE_TOP,    reBot:   L.RE_BOT,
   lbPk:    L.LB_PEAK,   rbPk:    L.RB_PEAK,
+  lbIn:    L.LB_IN,     lbOut:   L.LB_OUT,
+  rbIn:    L.RB_IN,     rbOut:   L.RB_OUT,
   lAlar:   L.L_ALAR,    rAlar:   L.R_ALAR,
   noseTip: L.NOSE_TIP,
   lChin:   L.L_CHIN,    rChin:   L.R_CHIN,
+  lMouth:  L.L_MOUTH,   rMouth:  L.R_MOUTH,
+  stomU:   L.STOMION_U, stomD:   L.STOMION_D,
 };
 
 // Which toggle group each draggable point belongs to. Points whose
@@ -422,10 +435,15 @@ const DRAGGABLE = {
 const POINT_GROUP = {
   trich: 'thirds', glab: 'thirds', nasion: 'thirds', subnas: 'thirds', ment: 'thirds',
   ulip:  'thirds', llip:  'thirds',
-  leIn:  'eyes',   leOut: 'eyes',  reIn:  'eyes',   reOut: 'eyes',
+  leIn:  'eyes',   leOut: 'eyes',  leTop:  'eyes',  leBot:  'eyes',
+  reIn:  'eyes',   reOut: 'eyes',  reTop:  'eyes',  reBot:  'eyes',
   lbPk:  'brows',  rbPk:  'brows',
+  lbIn:  'brows',  lbOut: 'brows',
+  rbIn:  'brows',  rbOut: 'brows',
   lAlar: 'alar',   rAlar: 'alar',  noseTip: 'alar',
   lChin: 'jaw',    rChin: 'jaw',
+  lMouth: 'jaw',   rMouth: 'jaw',
+  stomU:  'thirds', stomD: 'thirds',
 };
 
 // ════════════════════════════════════════════════════════════════
@@ -739,13 +757,18 @@ function drawCanvas(canvas, img, lm, m) {
   const sc  = dW / img.naturalWidth;
   currentSc = sc;
 
-  canvas.width  = dW * dpr;
-  canvas.height = dH * dpr;
-  canvas.style.width  = dW + 'px';
-  canvas.style.height = dH + 'px';
+  // Zoom applies a viewport clip and scale
+  const zW = Math.round(dW / currentZoom);
+  const zH = Math.round(dH / currentZoom);
+  canvas.width  = zW * dpr;
+  canvas.height = zH * dpr;
+  canvas.style.width  = zW + 'px';
+  canvas.style.height = zH + 'px';
 
   const ctx = canvas.getContext('2d');
   ctx.scale(dpr, dpr);
+  ctx.scale(currentZoom, currentZoom);
+  ctx.translate(zoomPanX, zoomPanY);
   ctx.drawImage(img, 0, 0, dW, dH);
 
   const s  = v => v * sc;
@@ -1013,6 +1036,8 @@ function buildReport(m) {
       <br><b>Nasion</b> — top of the nose bridge, where the nose meets the forehead. Also the top of the fWHR height span.
       <br><b>Subnasale</b> — where the base of the nose (columella) meets the upper lip, on the midline.
       <br><b>Upper lip</b> — the centre peak of the top lip (Cupid's bow peak), labrale superius.
+      <br><b>Stomion upper</b> — the point where the lips meet when closed, on the midline (upper margin of the mouth opening).
+      <br><b>Stomion lower</b> — the point where the lips meet when closed, on the midline (lower margin of the mouth opening). These define the lip aperture / mouth opening height.
       <br><b>Lower lip</b> — the centre of the lower lip's fullest point, labrale inferius.
       <br><b>Menton</b> — the very lowest point of the chin, on the midline.
     </div>
@@ -1020,11 +1045,16 @@ function buildReport(m) {
     <div class="pnote"><span class="pnlabel" style="color:var(--green)">EYES (green dots)</span>
       <br><b>Inner corners (×2)</b> — the medial canthus where upper and lower lids meet closest to the nose. One per eye.
       <br><b>Outer corners (×2)</b> — the lateral canthus where lids meet at the outer edge. One per eye.
-      <br>Canthal tilt is the angle of the line from inner to outer corner — positive means outer is higher.
+      <br><b>Eye tops (×2)</b> — the topmost point of the upper lid, one per eye.
+      <br><b>Eye bottoms (×2)</b> — the lowest point of the lower lid, one per eye.
+      <br>Eye height (top to bottom) and aspect ratio depend on accurate top/bottom placement. Canthal tilt is the angle of the line from inner to outer corner — positive means outer is higher.
     </div>
 
     <div class="pnote"><span class="pnlabel" style="color:var(--amber)">BROWS (amber)</span>
       <br><b>Brow peak (×2)</b> — the highest point of each eyebrow arch, roughly above the outer iris. One per brow.
+      <br><b>Brow inner end (×2)</b> — where the eyebrow starts on the medial side (inner, toward the nose). One per brow.
+      <br><b>Brow outer end (×2)</b> — where the eyebrow ends on the lateral side (outer, toward the temple). One per brow.
+      <br>Brow arch position is calculated from these three points; accurate placement of inner/outer endpoints determines the arch taper and shape.
     </div>
 
     <div class="pnote"><span class="pnlabel" style="color:var(--amber)">ALAR (amber)</span>
@@ -1045,7 +1075,7 @@ function buildReport(m) {
     <div class="pnote"><span class="pnlabel" style="color:#e05252">JAW — Bigonial (red dots)</span>
       <br>The gonion: the angle of the jaw below and slightly in front of each earlobe, one per side. This is the most posterior-inferior point of the mandibular angle. On a front-facing photo it appears as the outermost point of the lower jaw, level with somewhere between the mouth and chin.
       <br><b>Chin corners (light gray)</b> — the points at the lateral edges of the chin, where the chin contour meets the cheek/jaw outline. These define chin width. Drag them inward to narrow the chin or outward to widen it.
-
+      <br><b>Mouth corners (×2)</b> — where the upper and lower lips meet, one at each side of the mouth. These help define mouth width, which indirectly affects measurements of the lower face.
     </div>
   </div>
 
@@ -1687,7 +1717,17 @@ function toggleEdit() {
   btn.textContent  = editMode ? 'Done ✓' : 'Edit ✎';
   btn.style.color  = editMode ? 'var(--teal)' : '';
   document.getElementById('result-canvas').style.cursor = editMode ? 'crosshair' : '';
-  if (!editMode) fullRedraw();
+  document.getElementById('zoom-controls').style.display = editMode ? 'flex' : 'none';
+  if (!editMode) {
+    currentZoom = 1; zoomPanX = 0; zoomPanY = 0;  // reset zoom on exit
+    fullRedraw();
+  }
+}
+
+function changeZoom(delta) {
+  currentZoom = Math.max(1, Math.min(4, currentZoom + delta));
+  document.getElementById('zoom-label').textContent = (currentZoom).toFixed(1) + 'x';
+  fullRedraw();
 }
 
 function fullRedraw() {
@@ -1701,7 +1741,12 @@ function fullRedraw() {
 function canvasXY(e) {
   const rect = document.getElementById('result-canvas').getBoundingClientRect();
   const src  = e.touches ? e.touches[0] : e;
-  return { cx: src.clientX - rect.left, cy: src.clientY - rect.top };
+  let cx = src.clientX - rect.left;
+  let cy = src.clientY - rect.top;
+  // Unzoom coordinates back to image space
+  cx = cx / currentZoom - zoomPanX;
+  cy = cy / currentZoom - zoomPanY;
+  return { cx, cy };
 }
 
 function nearestDraggable(cx, cy) {
