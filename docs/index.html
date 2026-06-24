@@ -1480,6 +1480,54 @@ function buildPresNotes(m) {
     });
   }
 
+  if (m.chinHRatio < 0.45 || m.chinHRatio > 0.55) {
+    notes.push({
+      lbl: 'Chin Height Proportion',
+      col: 'var(--amber)',
+      txt: `Chin height (${pct(m.chinHRatio * 100)}) is ${m.chinHRatio < 0.45 ? 'short relative to the lower face — reads more compact and youthful' : 'tall relative to the lower face — emphasizes lower third length'}. Canonical is 45–55% of lower third. Chin implant height/projection can be adjusted; lip filler distribution can optically shift proportions.`
+    });
+  }
+
+  if (m.lipHeightRatio > 0.25) {
+    notes.push({
+      lbl: 'Lower Lip Prominence',
+      col: 'var(--amber)',
+      txt: `Lip height as percentage of lower third (${pct(m.lipHeightRatio)}) reads higher than canonical (18–22%). This emphasizes lip fullness, which is feminine-coded but can read heavy if combined with a short lower third. Avoid overlining; focus makeup on upper lip definition.`
+    });
+  }
+
+  if (m.alarIcdR < 0.9 || m.alarIcdR > 1.1) {
+    notes.push({
+      lbl: 'Nose Width Proportion',
+      col: 'var(--amber)',
+      txt: `Alar width to intercanthal distance ratio (${f2(m.alarIcdR)}) is ${m.alarIcdR < 0.9 ? 'narrow — nose reads small relative to eye width' : 'wide — nose reads broad relative to eye width'}. Canonical is ~1.0. Contouring/highlight placement can optically adjust nose width perception.`
+    });
+  }
+
+  if (m.ltRatio < 1.5 || m.ltRatio > 2.5) {
+    notes.push({
+      lbl: 'Philtrum to Chin Ratio',
+      col: 'var(--amber)',
+      txt: `Lip-to-chin ratio (${f2(m.ltRatio)}) is ${m.ltRatio < 1.5 ? 'low — short philtrum relative to chin, emphasizes lower face length' : 'high — long philtrum relative to chin, shortens apparent chin'}. Canonical is ~2.0. Lip-lift (philtrum reduction) or chin implant can rebalance these proportions.`
+    });
+  }
+
+  if (m.eyeSymm < 0.90) {
+    notes.push({
+      lbl: 'Eye Width Asymmetry',
+      col: 'var(--amber)',
+      txt: `Eye width asymmetry detected (${pct(m.eyeSymm * 100)} symmetry). One eye opens notably wider than the other. This is common and often appears different depending on angle and expression. Asymmetric eyeliner or lash application can optically balance.`
+    });
+  }
+
+  if (m.icdRatio < 0.90) {
+    notes.push({
+      lbl: 'Close-Set Eyes',
+      col: 'var(--amber)',
+      txt: `ICD reads close-set (${f2(m.icdRatio)}× eye width, canonical ~1.0). Highlights on the inner corners can optically widen spacing; avoid dark inner-corner liner which closes the gap further.`
+    });
+  }
+
   if (notes.length === 0) {
     notes.push({
       lbl: 'No high-priority flags',
