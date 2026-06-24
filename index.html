@@ -633,6 +633,7 @@ function calcMetrics(lm, W, H) {
   m.lipRatio   = m.upperVerm / (m.lowerVerm || 1);  // canon ~0.6
 
   m.philtrum   = ulip.y   - subnas.y;
+  m.philtrumRatio = m.philtrum / m.lowerPx;  // fraction of lower third; canon ~0.18-0.22
   m.lipChin    = ment.y   - ulip.y;
   m.ltRatio    = m.lipChin / (m.philtrum || 1);  // canon ~2.0
 
@@ -1211,18 +1212,12 @@ function buildReport(m) {
   <div class="card">
     <div class="card-head">Eye Opening (Palpebral Fissure)</div>
     <div class="mrow">
-      <span class="mname">Average eye height (pixels)</span>
-      <span class="mval">${f1(m.avgPalpH)}</span>
-      <span class="mcanon">9–12mm range</span>
-      ${m.avgPalpH >= 9 * (m.avgEyeW / 30) && m.avgPalpH <= 12 * (m.avgEyeW / 30) ? bdg('Typical', 'ok') : bdg('Out of range', 'warn')}
-    </div>
-    <div class="mrow">
       <span class="mname">Height-to-width ratio</span>
       <span class="mval">${f2(m.palpRatio)}</span>
       <span class="mcanon">~0.33 (1:3)</span>
       ${Math.abs(m.palpRatio - 0.33) < 0.05 ? bdg('Typical', 'ok') : bdg('Off-ratio', 'warn')}
     </div>
-    <div class="sub">Vertical eye opening as fraction of horizontal width. Larger relative opening = younger/more feminine appearance. Expression-sensitive; measure in neutral pose.</div>
+    <div class="sub">Vertical eye opening as fraction of horizontal width. Proportion of ~0.33 (height 1/3 of width) = typical. Larger ratio = more open eye (younger/more feminine). Expression-sensitive; measure in neutral pose.</div>
   </div>
 
   <!-- BROW POSITION AND ARCH -->
@@ -1272,12 +1267,12 @@ function buildReport(m) {
   <div class="card">
     <div class="card-head">Philtrum Length & Chin</div>
     <div class="mrow">
-      <span class="mname">Philtrum length (subnasale → upper lip, pixels)</span>
-      <span class="mval">${f1(m.philtrum)}</span>
-      <span class="mcanon">11–13mm ideal</span>
-      ${m.philtrum >= 11 * (m.avgEyeW / 30) && m.philtrum <= 13 * (m.avgEyeW / 30) ? bdg('Ideal', 'ok') : m.philtrum > 13 * (m.avgEyeW / 30) ? bdg('Long (reduced lip show)', 'warn') : bdg('Short', 'info')}
+      <span class="mname">Philtrum length (% of lower third)</span>
+      <span class="mval">${pct(m.philtrumRatio * 100)}</span>
+      <span class="mcanon">18–22%</span>
+      ${m.philtrumRatio >= 0.18 && m.philtrumRatio <= 0.22 ? bdg('Ideal', 'ok') : m.philtrumRatio > 0.22 ? bdg('Long (reduced lip show)', 'warn') : bdg('Short', 'info')}
     </div>
-    <div class="sub">Longer philtrum = less visible upper lip at rest. Lip-lift (philtrum shortening) is common FFS; shortening by 2–4mm significantly increases perceived lip fullness.</div>
+    <div class="sub">Longer philtrum (as proportion of lower third) = less visible upper lip at rest. Lip-lift is common FFS to shorten philtrum and increase perceived lip fullness.</div>
     <div class="mrow">
       <span class="mname">Chin width taper (chin ÷ bigonial width)</span>
       <span class="mval">${f2(m.chinTaper)}</span>
@@ -1428,11 +1423,11 @@ function buildPresNotes(m) {
     });
   }
 
-  if (m.philtrum > 13 * (m.avgEyeW / 30)) {
+  if (m.philtrumRatio > 0.22) {
     notes.push({
       lbl: 'Philtrum Length — Lip Enhancement',
       col: 'var(--amber)',
-      txt: `Philtrum (${f1(m.philtrum)} pixels, ~${(m.philtrum / (m.avgEyeW / 30)).toFixed(1)}mm) reads longer than ideal (<13mm). This reduces visible upper lip at rest. Lip-lift (philtrum shortening by 2–4mm via surgical incision above the lip) is a direct, impactful FFS procedure. Reduces need for lip augmentation.`
+      txt: `Philtrum is ${pct(m.philtrumRatio * 100)} of lower third (canon 18–22%), reading longer than ideal. This reduces visible upper lip at rest. Lip-lift (surgical shortening of philtrum above the lip) is a direct, impactful FFS procedure that increases perceived lip fullness. Reduces need for lip augmentation.`
     });
   }
 
