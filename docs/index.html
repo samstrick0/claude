@@ -1336,6 +1336,13 @@ function buildReport(m) {
     <div class="sub">Combined upper + lower vermilion as % of lower face height. Too much lip height reads unnatural.</div>
   </div>
 
+  <!-- STRENGTHS -->
+  <div class="card">
+    <div class="card-head" style="color:var(--green)">What's Working Well</div>
+    <div class="pnote" style="color:var(--text2); font-size:12px; padding:8px 14px; border-bottom:1px solid var(--border)">Metrics that already fall in the canonical/ideal range on this image. These are your natural strengths — leave them alone and build around them.</div>
+    ${buildStrengths(m)}
+  </div>
+
   <!-- DIMORPHISM -->
   <div class="card">
     <div class="card-head">Dimorphism Markers (Frontal, Structural)</div>
@@ -1399,6 +1406,84 @@ function buildDimorphism(m) {
   return rows.map(r => `
     <div class="mrow"><span class="mname">${r.name}</span>${bdg(r.val, r.cls)}</div>
     <div class="sub">${r.note}</div>
+  `).join('');
+}
+
+function buildStrengths(m) {
+  const wins = [];
+  const inRange = (v, lo, hi) => v >= lo && v <= hi;
+
+  // Facial thirds balance
+  if (inRange(m.upperPct, 30, 37) && inRange(m.midPct, 30, 37) && inRange(m.lowerPct, 30, 37)) {
+    wins.push(`<b>Balanced facial thirds.</b> Upper ${pct(m.upperPct)}, middle ${pct(m.midPct)}, lower ${pct(m.lowerPct)} — close to the classical 33/33/33 division, which reads as a harmonious vertical balance.`);
+  }
+  // Eye aspect ratio
+  if (inRange(m.avgAR, 0.28, 0.34)) {
+    wins.push(`<b>Open, almond eye shape.</b> Eye aspect ratio (${f2(m.avgAR)}) sits in the ideal range — tall enough to read open and youthful without looking strained.`);
+  }
+  // Eye spacing
+  if (inRange(m.icdRatio, 0.92, 1.08)) {
+    wins.push(`<b>Ideal eye spacing.</b> The gap between your eyes (${f2(m.icdRatio)}× one eye width) is right at the classical one-eye-width ideal.`);
+  }
+  // Canthal tilt
+  if (m.avgTilt >= 1) {
+    wins.push(`<b>Positive canthal tilt.</b> Your eyes tilt up ${sgn(m.avgTilt)} on average — an upward outer corner is widely considered an aesthetic asset and reads youthful and feminine.`);
+  }
+  // Brow-eye distance
+  if (m.bedFrac >= 0.40) {
+    wins.push(`<b>Open upper eye.</b> Your brow sits a generous distance above the eye (${f2(m.bedFrac)}× eye width) — a feminine-leaning, lifted upper-eye region.`);
+  }
+  // Brow arch
+  if (m.lArch > 0.55 && m.rArch > 0.55) {
+    wins.push(`<b>Lifted brow arch.</b> Both brow peaks sit laterally — a high, arched shape rather than a flat masculine brow.`);
+  }
+  // Nose width proportion
+  if (inRange(m.alarIcdR, 0.9, 1.1)) {
+    wins.push(`<b>Proportionate nose width.</b> Your alar base (${f2(m.alarIcdR)}× inter-canthal distance) is balanced against eye spacing — close to the ideal where nostril width matches the gap between the eyes.`);
+  }
+  // Lip ratio
+  if (inRange(m.lipRatio, 0.5, 0.8)) {
+    wins.push(`<b>Balanced lip volume.</b> Upper-to-lower lip ratio (${f2(m.lipRatio)}) is well proportioned — neither lip overpowers the other.`);
+  }
+  // Philtrum length
+  if (inRange(m.philtrumRatio, 0.18, 0.22)) {
+    wins.push(`<b>Proportionate philtrum.</b> The distance from nose to upper lip (${pct(m.philtrumRatio * 100)} of the lower third) is in the ideal range.`);
+  }
+  // Chin taper
+  if (inRange(m.chinTaper, 0.45, 0.55)) {
+    wins.push(`<b>Well-tapered chin.</b> Chin width relative to the jaw (${f2(m.chinTaper)}) tapers cleanly — a refined, balanced lower face.`);
+  }
+  // Chin height proportion
+  if (inRange(m.chinHRatio, 0.45, 0.55)) {
+    wins.push(`<b>Balanced chin height.</b> Chin height (${pct(m.chinHRatio * 100)} of the lower third) is well proportioned.`);
+  }
+  // Jaw taper
+  if (m.jawTaper <= 0.80) {
+    wins.push(`<b>Soft jaw taper.</b> Your face narrows gently from cheek to jaw (${f2(m.jawTaper)}) — a feminine-leaning lower face, the single most predictive structural marker.`);
+  }
+  // fWHR
+  if (m.fWHR <= 1.7) {
+    wins.push(`<b>Slimmer facial width.</b> Facial width-to-height ratio (${f2(m.fWHR)}) is in the longer, feminine-leaning range.`);
+  }
+  // Lip-to-chin ratio
+  if (inRange(m.ltRatio, 1.5, 2.5)) {
+    wins.push(`<b>Balanced lower-face proportions.</b> The lip-to-chin ratio (${f2(m.ltRatio)}) is close to the classical ideal.`);
+  }
+  // Total lip height
+  if (inRange(m.lipHeightRatio * 100, 18, 22)) {
+    wins.push(`<b>Natural lip fullness.</b> Total lip height (${pct(m.lipHeightRatio * 100)} of the lower third) is in the ideal range — full without looking overdone.`);
+  }
+  // Symmetry
+  if (m.browSymm < 4 && m.jawSymm < 4 && m.eyeSymm >= 0.95) {
+    wins.push(`<b>Strong bilateral symmetry.</b> Brows, eyes, and jaw are closely matched left-to-right — a subtle but consistently rated marker of attractiveness.`);
+  }
+
+  if (wins.length === 0) {
+    return `<div class="pnote"><span class="pnlabel" style="color:var(--green)">Keep going.</span>No individual metric landed squarely in the canonical band on this image, but most analyses have at least a few near-misses worth revisiting after adjusting the points. Lighting, angle and expression all shift these values.</div>`;
+  }
+
+  return wins.map(w => `
+    <div class="pnote"><span style="color:var(--green)">✓</span> ${w}</div>
   `).join('');
 }
 
