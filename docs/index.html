@@ -279,11 +279,31 @@ body {
 }
 
 .method-note {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--text2);
   line-height: 1.7;
   padding: 12px 14px;
 }
+details.card > summary {
+  list-style: none;
+  cursor: pointer;
+}
+details.card > summary::-webkit-details-marker { display: none; }
+details.card > summary::after { content: '  ▸'; color: var(--text2); }
+details.card[open] > summary::after { content: '  ▾'; }
+.copy-btn {
+  width: 100%;
+  margin-bottom: 14px;
+  background: var(--teal);
+  color: #06120f;
+  border: none;
+  font-weight: 700;
+  font-size: 15px;
+  border-radius: 12px;
+  padding: 13px;
+  min-height: 48px;
+}
+.copy-btn:active { background: #2fb3a0; }
 </style>
 </head>
 <body>
@@ -414,6 +434,7 @@ let dragKey    = null;
 // Editable jaw/bizygomatic points (image coords). Null until first
 // computed from the estimate; persists across redraws once dragged.
 let jawPoints  = null;
+let lastMetrics = null;  // most recent metrics, for the copy-to-clipboard button
 
 let currentZoom = 1;      // 1.0 = 100%, 2.0 = 200%, etc.
 let zoomPanX   = 0;       // pan offset in canvas coords
@@ -1061,18 +1082,14 @@ function devBdg(val, canon, tol) {
 }
 
 function buildReport(m) {
+  lastMetrics = m;
   return `
-  <!-- KEY -->
-  <div class="card">
-    <div class="card-head">Confidence Key</div>
-    <div class="conf-row"><span class="dot dot-g"></span>Detected — direct 478-pt landmark</div>
-    <div class="conf-row"><span class="dot dot-a"></span>Estimated — derived from detected points</div>
-    <div class="conf-row"><span class="dot dot-r"></span>Low — inherent single-angle limitation</div>
-  </div>
+  <button class="copy-btn" onclick="copyMetrics(this)">📋 Copy all ratios &amp; percentages</button>
 
-  <!-- LANDMARK PLACEMENT GUIDE -->
-  <div class="card">
-    <div class="card-head">Point Placement Guide</div>
+  <!-- POINT GUIDE (collapsible) -->
+  <details class="card">
+    <summary class="card-head">Point Placement Guide &amp; Confidence Key</summary>
+    <div class="conf-row"><span class="dot dot-g"></span>Detected · <span class="dot dot-a" style="margin-left:8px"></span>Estimated · <span class="dot dot-r" style="margin-left:8px"></span>Low confidence</div>
     <div class="pnote" style="color:var(--text2); font-size:12px; padding:8px 14px; border-bottom:1px solid var(--border)">Tap <b style="color:var(--teal)">Edit ✎</b> to drag dots. Use the SHOW toggles to isolate one group at a time so you can move the right dot.</div>
 
     <div class="pnote"><span class="pnlabel" style="color:var(--teal)">THIRDS (green dots)</span>
@@ -1122,307 +1139,85 @@ function buildReport(m) {
       <br><b>Chin corners (light gray)</b> — the points at the lateral edges of the chin, where the chin contour meets the cheek/jaw outline. These define chin width. Drag them inward to narrow the chin or outward to widen it.
       <br><b>Mouth corners (×2)</b> — where the upper and lower lips meet, one at each side of the mouth. These help define mouth width, which indirectly affects measurements of the lower face.
     </div>
+  </details>
+
+  <!-- WHAT'S WORKING WELL -->
+  <div class="card">
+    <div class="card-head" style="color:var(--green)">What's Working Well</div>
+    ${buildStrengths(m)}
   </div>
 
   <!-- FACIAL THIRDS -->
   <div class="card">
     <div class="card-head">Facial Thirds</div>
-    ${m.upperPct < 15 ? `<div class="sub" style="color:var(--amber)">⚠ Upper third reads very short — hairline may be obscured or receded. Treat as estimated.</div>` : ''}
-    <div class="mrow">
-      <span class="mname">Upper  (trichion → glabella)</span>
-      <span class="mval">${pct(m.upperPct)}</span>
-      <span class="mcanon">33.3%</span>
-      ${devBdg(m.upperPct, 33.3, 8)}
-    </div>
-    <div class="sub">Conf: LOW ★ — trichion is forehead landmark, not true hairline</div>
-    <div class="mrow">
-      <span class="mname">Middle (glabella → subnasale)</span>
-      <span class="mval">${pct(m.midPct)}</span>
-      <span class="mcanon">33.3%</span>
-      ${devBdg(m.midPct, 33.3, 8)}
-    </div>
-    <div class="sub">Conf: DETECTED</div>
-    <div class="mrow">
-      <span class="mname">Lower  (subnasale → menton)</span>
-      <span class="mval">${pct(m.lowerPct)}</span>
-      <span class="mcanon">33.3%</span>
-      ${devBdg(m.lowerPct, 33.3, 8)}
-    </div>
-    <div class="sub">Conf: DETECTED</div>
+    ${m.upperPct < 15 ? `<div class="sub" style="color:var(--amber)">⚠ Upper third reads very short — hairline may be obscured.</div>` : ''}
+    <div class="mrow"><span class="mname">Upper (hairline → brow)</span><span class="mval">${pct(m.upperPct)}</span><span class="mcanon">33%</span>${devBdg(m.upperPct, 33.3, 8)}</div>
+    <div class="mrow"><span class="mname">Middle (brow → nose)</span><span class="mval">${pct(m.midPct)}</span><span class="mcanon">33%</span>${devBdg(m.midPct, 33.3, 8)}</div>
+    <div class="mrow"><span class="mname">Lower (nose → chin)</span><span class="mval">${pct(m.lowerPct)}</span><span class="mcanon">33%</span>${devBdg(m.lowerPct, 33.3, 8)}</div>
   </div>
 
-  <!-- EYE METRICS -->
+  <!-- EYES -->
   <div class="card">
-    <div class="card-head">Eye Metrics</div>
-    <div class="mrow">
-      <span class="mname">Intercanthal / eye-width ratio</span>
-      <span class="mval">${f2(m.icdRatio)}</span>
-      <span class="mcanon">~1.0</span>
-      ${m.icdRatio < 0.9 ? bdg('Close-set', 'info') : m.icdRatio > 1.1 ? bdg('Wide-set', 'warn') : bdg('Canonical', 'ok')}
-    </div>
-    <div class="sub">Conf: DETECTED</div>
-    <div class="mrow">
-      <span class="mname">Left canthal tilt</span>
-      <span class="mval">${sgn(m.lTilt)}</span>
-      <span class="mcanon">+1–5°</span>
-      ${m.lTilt >= 1 ? bdg('Positive', 'ok') : m.lTilt >= 0 ? bdg('Neutral', 'warn') : bdg('Negative', 'off')}
-    </div>
-    <div class="mrow">
-      <span class="mname">Right canthal tilt</span>
-      <span class="mval">${sgn(m.rTilt)}</span>
-      <span class="mcanon">+1–5°</span>
-      ${m.rTilt >= 1 ? bdg('Positive', 'ok') : m.rTilt >= 0 ? bdg('Neutral', 'warn') : bdg('Negative', 'off')}
-    </div>
-    <div class="sub">Positive = outer canthus higher than inner. Conf: DETECTED</div>
-    <div class="mrow">
-      <span class="mname">Eye aspect ratio (height ÷ width)</span>
-      <span class="mval">${f2(m.avgAR)}</span>
-      <span class="mcanon">0.25–0.35</span>
-      ${m.avgAR >= 0.25 && m.avgAR <= 0.40 ? bdg('In range', 'ok') : bdg('Out of range', 'warn')}
-    </div>
-    <div class="sub">Higher = more open eye vertically. Expression-sensitive. Conf: DETECTED</div>
+    <div class="card-head">Eyes</div>
+    <div class="mrow"><span class="mname">Eye spacing (ICD ÷ eye width)</span><span class="mval">${f2(m.icdRatio)}</span><span class="mcanon">~1.0</span>${m.icdRatio < 0.9 ? bdg('Close-set', 'info') : m.icdRatio > 1.1 ? bdg('Wide-set', 'warn') : bdg('Canon', 'ok')}</div>
+    <div class="mrow"><span class="mname">Canthal tilt (L / R)</span><span class="mval">${sgn(m.lTilt)} / ${sgn(m.rTilt)}</span><span class="mcanon">+1–5°</span>${m.avgTilt >= 1 ? bdg('Positive', 'ok') : m.avgTilt >= 0 ? bdg('Neutral', 'warn') : bdg('Negative', 'off')}</div>
+    <div class="mrow"><span class="mname">Eye aspect ratio (h ÷ w)</span><span class="mval">${f2(m.avgAR)}</span><span class="mcanon">0.25–0.35</span>${m.avgAR >= 0.25 && m.avgAR <= 0.40 ? bdg('In range', 'ok') : bdg('Out', 'warn')}</div>
+    <div class="sub">Positive tilt = outer corner higher. Aspect ratio is expression-sensitive — measure neutral.</div>
   </div>
 
-  <!-- BROW METRICS -->
+  <!-- BROWS -->
   <div class="card">
-    <div class="card-head">Brow Metrics</div>
-    <div class="mrow">
-      <span class="mname">Brow-eye distance (× eye width)</span>
-      <span class="mval">${f2(m.bedFrac)}×</span>
-      <span class="mcanon">≥0.40 fem</span>
-      ${m.bedFrac >= 0.40 ? bdg('Feminine range', 'ok') : m.bedFrac >= 0.25 ? bdg('Neutral', 'warn') : bdg('Masculine range', 'off')}
-    </div>
-    <div class="sub">Vertical gap between brow peak and upper lid, normalised to eye width. Strongest single frontal dimorphism marker. Conf: DETECTED</div>
-    <div class="mrow">
-      <span class="mname">Left brow arch position</span>
-      <span class="mval">${pct(m.lArch * 100)}</span>
-      <span class="mcanon">60–70%</span>
-      ${devBdg(m.lArch * 100, 65, 10)}
-    </div>
-    <div class="mrow">
-      <span class="mname">Right brow arch position</span>
-      <span class="mval">${pct(m.rArch * 100)}</span>
-      <span class="mcanon">60–70%</span>
-      ${devBdg(m.rArch * 100, 65, 10)}
-    </div>
-    <div class="sub">Peak as % from inner brow. ~65% = high lateral arch (feminine-coded). Lower % = flatter, more medial peak. Conf: DETECTED</div>
+    <div class="card-head">Brows</div>
+    <div class="mrow"><span class="mname">Brow–eye distance (× eye width)</span><span class="mval">${f2(m.bedFrac)}×</span><span class="mcanon">≥0.40</span>${m.bedFrac >= 0.40 ? bdg('Feminine', 'ok') : m.bedFrac >= 0.25 ? bdg('Neutral', 'warn') : bdg('Masculine', 'off')}</div>
+    <div class="mrow"><span class="mname">Brow arch position (L / R)</span><span class="mval">${pct(m.lArch * 100)} / ${pct(m.rArch * 100)}</span><span class="mcanon">60–70%</span>${devBdg((m.lArch + m.rArch) / 2 * 100, 65, 10)}</div>
+    <div class="mrow"><span class="mname">Brow height (eye-normalized)</span><span class="mval">${f1(m.avgBrowH)}</span><span class="mcanon">higher = fem</span>${m.avgBrowH >= 10 * (m.avgEyeW / 30) ? bdg('Elevated', 'ok') : m.avgBrowH >= 5 * (m.avgEyeW / 30) ? bdg('Neutral', 'warn') : bdg('Low', 'off')}</div>
+    <div class="sub">Brow–eye distance is the strongest single frontal dimorphism marker. Arch peak ~65% from inner = high lateral arch.</div>
   </div>
 
   <!-- NOSE -->
   <div class="card">
-    <div class="card-head">Nose (Frontal Only)</div>
-    <div class="mrow">
-      <span class="mname">Alar width ÷ intercanthal distance</span>
-      <span class="mval">${f2(m.alarIcdR)}</span>
-      <span class="mcanon">~1.0</span>
-      ${devBdg(m.alarIcdR, 1.0, 10)}
-    </div>
-    <div class="sub">Canon: alar base ≈ ICD. Conf: DETECTED · ⚠ Profile metrics (nasolabial angle, projection, dorsal profile) not assessable from this angle.</div>
+    <div class="card-head">Nose (frontal only)</div>
+    <div class="mrow"><span class="mname">Alar width ÷ eye spacing (ICD)</span><span class="mval">${f2(m.alarIcdR)}</span><span class="mcanon">~1.0</span>${devBdg(m.alarIcdR, 1.0, 10)}</div>
+    <div class="mrow"><span class="mname">Alar width % of face width</span><span class="mval">${pct((m.alarW / m.bizWidth) * 100)}</span><span class="mcanon">24–26%</span>${devBdg((m.alarW / m.bizWidth) * 100, 25, 5)}</div>
+    <div class="sub">Narrower nose proportionally reads more feminine. Profile metrics (projection, nasolabial angle) not assessable from this angle.</div>
   </div>
 
-  <!-- LOWER THIRD -->
+  <!-- STRUCTURE -->
   <div class="card">
-    <div class="card-head">Lower Third Sub-Partition</div>
-    <div class="mrow">
-      <span class="mname">Philtrum : (lip + chin) ratio</span>
-      <span class="mval">1 : ${f2(m.ltRatio)}</span>
-      <span class="mcanon">1 : 2.0</span>
-      ${devBdg(m.ltRatio, 2.0, 15)}
-    </div>
-    <div class="sub">Conf: DETECTED</div>
-    <div class="mrow">
-      <span class="mname">Upper : lower vermilion ratio</span>
-      <span class="mval">${f2(m.lipRatio)}</span>
-      <span class="mcanon">~0.60</span>
-      ${devBdg(m.lipRatio, 0.60, 20)}
-    </div>
-    <div class="sub">Upper lip should be ~60% of lower. Expression-sensitive. Conf: DETECTED</div>
+    <div class="card-head">Structure — fWHR · Jaw · Chin</div>
+    <div class="mrow"><span class="mname">fWHR (face width ÷ height)</span><span class="mval">${f2(m.fWHR)}</span><span class="mcanon">F 1.5–1.7</span>${m.fWHR <= 1.7 ? bdg('Feminine', 'ok') : m.fWHR <= 1.9 ? bdg('Androgynous', 'warn') : bdg('Masculine', 'off')}</div>
+    <div class="mrow"><span class="mname">Jaw taper (jaw ÷ cheekbone)</span><span class="mval">${f2(m.jawTaper)}</span><span class="mcanon">F 0.73–0.80</span>${m.jawTaper <= 0.80 ? bdg('Feminine', 'ok') : m.jawTaper <= 0.83 ? bdg('Neutral', 'warn') : bdg('Wide', 'off')}</div>
+    <div class="mrow"><span class="mname">Chin taper (chin ÷ jaw)</span><span class="mval">${f2(m.chinTaper)}</span><span class="mcanon">0.45–0.55</span>${m.chinTaper >= 0.45 && m.chinTaper <= 0.55 ? bdg('Feminine', 'ok') : m.chinTaper < 0.45 ? bdg('Narrow', 'warn') : bdg('Wide', 'off')}</div>
+    <div class="mrow"><span class="mname">Chin height % of lower third</span><span class="mval">${pct(m.chinHRatio * 100)}</span><span class="mcanon">45–55%</span>${devBdg(m.chinHRatio * 100, 50, 10)}</div>
+    <div class="sub">fWHR and jaw taper are the two strongest structural dimorphism markers — highest-value FFS planning metrics.</div>
+  </div>
+
+  <!-- LIPS & PHILTRUM -->
+  <div class="card">
+    <div class="card-head">Lips & Philtrum</div>
+    <div class="mrow"><span class="mname">Philtrum % of lower third</span><span class="mval">${pct(m.philtrumRatio * 100)}</span><span class="mcanon">18–22%</span>${m.philtrumRatio >= 0.18 && m.philtrumRatio <= 0.22 ? bdg('Ideal', 'ok') : m.philtrumRatio > 0.22 ? bdg('Long', 'warn') : bdg('Short', 'info')}</div>
+    <div class="mrow"><span class="mname">Upper : lower lip fullness</span><span class="mval">${f2(m.lipRatio)}</span><span class="mcanon">~0.60</span>${devBdg(m.lipRatio, 0.60, 20)}</div>
+    <div class="mrow"><span class="mname">Mouth width ÷ alar base</span><span class="mval">${f2(m.mouthWAlarR)}</span><span class="mcanon">1.3–1.5</span>${m.mouthWAlarR >= 1.3 && m.mouthWAlarR <= 1.5 ? bdg('Canon', 'ok') : m.mouthWAlarR < 1.3 ? bdg('Narrow', 'warn') : bdg('Wide', 'off')}</div>
+    <div class="mrow"><span class="mname">Total lip height % of lower third</span><span class="mval">${pct(m.lipHeightRatio * 100)}</span><span class="mcanon">18–22%</span>${m.lipHeightRatio * 100 >= 18 && m.lipHeightRatio * 100 <= 22 ? bdg('Ideal', 'ok') : bdg('Out', 'warn')}</div>
+    <div class="mrow"><span class="mname">Philtrum : lip + chin</span><span class="mval">1 : ${f2(m.ltRatio)}</span><span class="mcanon">1 : 2.0</span>${devBdg(m.ltRatio, 2.0, 15)}</div>
   </div>
 
   <!-- SYMMETRY -->
   <div class="card">
     <div class="card-head">Symmetry</div>
-    <div class="mrow">
-      <span class="mname">Eye width symmetry (minor ÷ major)</span>
-      <span class="mval">${pct(m.eyeSymm * 100)}</span>
-      <span class="mcanon">≥90%</span>
-      ${m.eyeSymm >= 0.90 ? bdg('Symmetric', 'ok') : bdg('Asymmetry', 'warn')}
-    </div>
-    <div class="mrow">
-      <span class="mname">Canthal tilt L vs R difference</span>
-      <span class="mval">${f1(m.tiltDiff)}°</span>
-      <span class="mcanon">≤2°</span>
-      ${m.tiltDiff <= 2 ? bdg('Symmetric', 'ok') : bdg('Asymmetry', 'warn')}
-    </div>
-    <div class="mrow">
-      <span class="mname">Nose tip midline deviation</span>
-      <span class="mval">${f1(Math.abs(m.midDevPct))}% ${m.midDev > 0 ? '→R' : '→L'}</span>
-      <span class="mcanon">≤2%</span>
-      ${Math.abs(m.midDevPct) <= 2 ? bdg('Centered', 'ok') : bdg('Deviation', 'warn')}
-    </div>
-    <div class="sub">Conf: DETECTED · Directional lighting inflates apparent asymmetry.</div>
-    <div class="mrow">
-      <span class="mname">Brow peak asymmetry</span>
-      <span class="mval">${f1(m.browSymm)}%</span>
-      <span class="mcanon">≤4%</span>
-      ${m.browSymm <= 4 ? bdg('Symmetric', 'ok') : bdg('Asymmetry', 'warn')}
-    </div>
-    <div class="mrow">
-      <span class="mname">Jaw angle asymmetry</span>
-      <span class="mval">${f1(m.jawSymm)}%</span>
-      <span class="mcanon">≤4%</span>
-      ${m.jawSymm <= 4 ? bdg('Symmetric', 'ok') : bdg('Asymmetry', 'warn')}
-    </div>
-    <div class="mrow">
-      <span class="mname">Mouth corner asymmetry</span>
-      <span class="mval">${f1(m.mouthSymm)}%</span>
-      <span class="mcanon">≤4%</span>
-      ${m.mouthSymm <= 4 ? bdg('Symmetric', 'ok') : bdg('Asymmetry', 'warn')}
-    </div>
-  </div>
-
-  <!-- FACIAL WIDTH-TO-HEIGHT RATIO (fWHR) -->
-  <div class="card">
-    <div class="card-head">Facial Width-to-Height Ratio (fWHR)</div>
-    <div class="mrow">
-      <span class="mname">fWHR (bizygomatic ÷ nasion-to-menton height)</span>
-      <span class="mval">${f2(m.fWHR)}</span>
-      <span class="mcanon">F: 1.5–1.7 · M: 1.9–2.1</span>
-      ${m.fWHR <= 1.7 ? bdg('Feminine range', 'ok') : m.fWHR <= 1.9 ? bdg('Androgynous', 'warn') : bdg('Masculine range', 'off')}
-    </div>
-    <div class="sub">One of the strongest dimorphism markers with robust evidence. Lower fWHR = more feminine-typical. Standard definition: cheekbone width ÷ full lower-face height (nasion bridge to chin).</div>
-  </div>
-
-  <!-- JAW TAPER RATIO -->
-  <div class="card">
-    <div class="card-head">Jaw Taper Ratio</div>
-    <div class="mrow">
-      <span class="mname">Bigonial ÷ bizygomatic width (jaw taper)</span>
-      <span class="mval">${f2(m.jawTaper)}</span>
-      <span class="mcanon">F: 0.73–0.80 · M: 0.83–0.92</span>
-      ${m.jawTaper <= 0.80 ? bdg('Feminine taper', 'ok') : m.jawTaper <= 0.83 ? bdg('Neutral', 'warn') : bdg('Wide jaw', 'off')}
-    </div>
-    <div class="sub">Conf: DETECTED · Jaw angle width ÷ cheekbone width. Highest-value single metric for FFS planning; directly maps to jaw contouring and chin implant decisions.</div>
-  </div>
-
-  <!-- PALPEBRAL FISSURE -->
-  <div class="card">
-    <div class="card-head">Eye Opening (Palpebral Fissure)</div>
-    <div class="mrow">
-      <span class="mname">Height-to-width ratio</span>
-      <span class="mval">${f2(m.palpRatio)}</span>
-      <span class="mcanon">~0.33 (1:3)</span>
-      ${Math.abs(m.palpRatio - 0.33) < 0.05 ? bdg('Typical', 'ok') : bdg('Off-ratio', 'warn')}
-    </div>
-    <div class="sub">Vertical eye opening as fraction of horizontal width. Proportion of ~0.33 (height 1/3 of width) = typical. Larger ratio = more open eye (younger/more feminine). Expression-sensitive; measure in neutral pose.</div>
-  </div>
-
-  <!-- BROW POSITION AND ARCH -->
-  <div class="card">
-    <div class="card-head">Brow Position & Arch</div>
-    <div class="mrow">
-      <span class="mname">Brow height above orbital rim (pixels, eye-normalized)</span>
-      <span class="mval">${f1(m.avgBrowH)}</span>
-      <span class="mcanon">F: 10–15mm · M: 0–5mm</span>
-      ${m.avgBrowH >= 10 * (m.avgEyeW / 30) ? bdg('Feminine-elevated', 'ok') : m.avgBrowH >= 5 * (m.avgEyeW / 30) ? bdg('Neutral', 'warn') : bdg('At/below rim', 'off')}
-    </div>
-    <div class="sub">Measured in pixels and scaled to eye width to approximate the canonical mm reference. Positive distance = brow above orbital rim (feminine). Conf: ESTIMATED</div>
-    <div class="mrow">
-      <span class="mname">Left brow arch position</span>
-      <span class="mval">${pct(m.lArch * 100)}</span>
-      <span class="mcanon">60–70% from inner</span>
-      ${devBdg(m.lArch * 100, 65, 10)}
-    </div>
-    <div class="mrow">
-      <span class="mname">Right brow arch position</span>
-      <span class="mval">${pct(m.rArch * 100)}</span>
-      <span class="mcanon">60–70% from inner</span>
-      ${devBdg(m.rArch * 100, 65, 10)}
-    </div>
-    <div class="sub">High arch (peak 60–70% from inner brow, above lateral limbus) is strongest single brow dimorphism signal. Both height and horizontal position matter.</div>
-  </div>
-
-  <!-- NASAL PROPORTIONS -->
-  <div class="card">
-    <div class="card-head">Nasal Width Proportions</div>
-    <div class="mrow">
-      <span class="mname">Alar width ÷ intercanthal distance</span>
-      <span class="mval">${f2(m.alarIcdR)}</span>
-      <span class="mcanon">0.9–1.1</span>
-      ${Math.abs(m.alarIcdR - 1.0) <= 0.1 ? bdg('Canonical', 'ok') : Math.abs(m.alarIcdR - 1.0) <= 0.2 ? bdg('Slight variance', 'warn') : bdg('Off-canon', 'off')}
-    </div>
-    <div class="mrow">
-      <span class="mname">Alar width % of bizygomatic</span>
-      <span class="mval">${pct((m.alarW / m.bizWidth) * 100)}</span>
-      <span class="mcanon">24–26%</span>
-      ${devBdg((m.alarW / m.bizWidth) * 100, 25, 5)}
-    </div>
-    <div class="sub">Narrower nose proportionally reads as more feminine-typical. Frontal only — profile (dorsum, projection, nasolabial angle) not assessable.</div>
-  </div>
-
-  <!-- PHILTRUM & CHIN -->
-  <div class="card">
-    <div class="card-head">Philtrum Length & Chin</div>
-    <div class="mrow">
-      <span class="mname">Philtrum length (% of lower third)</span>
-      <span class="mval">${pct(m.philtrumRatio * 100)}</span>
-      <span class="mcanon">18–22%</span>
-      ${m.philtrumRatio >= 0.18 && m.philtrumRatio <= 0.22 ? bdg('Ideal', 'ok') : m.philtrumRatio > 0.22 ? bdg('Long (reduced lip show)', 'warn') : bdg('Short', 'info')}
-    </div>
-    <div class="sub">Longer philtrum (as proportion of lower third) = less visible upper lip at rest. Lip-lift is common FFS to shorten philtrum and increase perceived lip fullness.</div>
-    <div class="mrow">
-      <span class="mname">Chin width taper (chin ÷ bigonial width)</span>
-      <span class="mval">${f2(m.chinTaper)}</span>
-      <span class="mcanon">F: 0.45–0.55</span>
-      ${m.chinTaper >= 0.45 && m.chinTaper <= 0.55 ? bdg('Feminine taper', 'ok') : m.chinTaper < 0.45 ? bdg('Narrow chin', 'warn') : bdg('Wide/square chin', 'off')}
-    </div>
-    <div class="mrow">
-      <span class="mname">Chin height % of lower third</span>
-      <span class="mval">${pct(m.chinHRatio * 100)}</span>
-      <span class="mcanon">45–55%</span>
-      ${devBdg(m.chinHRatio * 100, 50, 10)}
-    </div>
-    <div class="sub">Tapered, moderate-height chin reads feminine. Square, prominent, or overly tall chin reads masculine and is major FFS target.</div>
-  </div>
-
-  <!-- LIP PROPORTIONS (EXPANDED) -->
-  <div class="card">
-    <div class="card-head">Lip Proportions (Expanded)</div>
-    <div class="mrow">
-      <span class="mname">Upper : lower vermilion ratio</span>
-      <span class="mval">${f2(m.lipRatio)}</span>
-      <span class="mcanon">1:1.5 to 1:2.0</span>
-      ${devBdg(m.lipRatio, 0.60, 20)}
-    </div>
-    <div class="sub">Lower lip should be 1.5–2× fuller than upper. Natural ratio; don't over-augment upper.</div>
-    <div class="mrow">
-      <span class="mname">Mouth width ÷ alar base width</span>
-      <span class="mval">${f2(m.mouthWAlarR)}</span>
-      <span class="mcanon">1.3–1.5</span>
-      ${m.mouthWAlarR >= 1.3 && m.mouthWAlarR <= 1.5 ? bdg('Canonical', 'ok') : m.mouthWAlarR < 1.3 ? bdg('Narrow mouth', 'warn') : bdg('Wide mouth', 'off')}
-    </div>
-    <div class="sub">Mouth slightly wider than alar base. Very wide mouth reads less refined.</div>
-    <div class="mrow">
-      <span class="mname">Total lip height % of lower third</span>
-      <span class="mval">${pct(m.lipHeightRatio * 100)}</span>
-      <span class="mcanon">18–22%</span>
-      ${m.lipHeightRatio * 100 >= 18 && m.lipHeightRatio * 100 <= 22 ? bdg('Ideal', 'ok') : bdg('Out of range', 'warn')}
-    </div>
-    <div class="sub">Combined upper + lower vermilion as % of lower face height. Too much lip height reads unnatural.</div>
-  </div>
-
-  <!-- STRENGTHS -->
-  <div class="card">
-    <div class="card-head" style="color:var(--green)">What's Working Well</div>
-    <div class="pnote" style="color:var(--text2); font-size:12px; padding:8px 14px; border-bottom:1px solid var(--border)">Metrics that already fall in the canonical/ideal range on this image. These are your natural strengths — leave them alone and build around them.</div>
-    ${buildStrengths(m)}
+    <div class="mrow"><span class="mname">Eye width symmetry</span><span class="mval">${pct(m.eyeSymm * 100)}</span><span class="mcanon">≥90%</span>${m.eyeSymm >= 0.90 ? bdg('Symmetric', 'ok') : bdg('Asymmetry', 'warn')}</div>
+    <div class="mrow"><span class="mname">Canthal tilt L/R difference</span><span class="mval">${f1(m.tiltDiff)}°</span><span class="mcanon">≤2°</span>${m.tiltDiff <= 2 ? bdg('Symmetric', 'ok') : bdg('Asymmetry', 'warn')}</div>
+    <div class="mrow"><span class="mname">Nose tip midline deviation</span><span class="mval">${f1(Math.abs(m.midDevPct))}% ${m.midDev > 0 ? '→R' : '→L'}</span><span class="mcanon">≤2%</span>${Math.abs(m.midDevPct) <= 2 ? bdg('Centered', 'ok') : bdg('Deviation', 'warn')}</div>
+    <div class="mrow"><span class="mname">Brow peak asymmetry</span><span class="mval">${f1(m.browSymm)}%</span><span class="mcanon">≤4%</span>${m.browSymm <= 4 ? bdg('Symmetric', 'ok') : bdg('Asymmetry', 'warn')}</div>
+    <div class="mrow"><span class="mname">Jaw angle asymmetry</span><span class="mval">${f1(m.jawSymm)}%</span><span class="mcanon">≤4%</span>${m.jawSymm <= 4 ? bdg('Symmetric', 'ok') : bdg('Asymmetry', 'warn')}</div>
+    <div class="mrow"><span class="mname">Mouth corner asymmetry</span><span class="mval">${f1(m.mouthSymm)}%</span><span class="mcanon">≤4%</span>${m.mouthSymm <= 4 ? bdg('Symmetric', 'ok') : bdg('Asymmetry', 'warn')}</div>
+    <div class="sub">Directional lighting inflates apparent asymmetry.</div>
   </div>
 
   <!-- DIMORPHISM -->
   <div class="card">
-    <div class="card-head">Dimorphism Markers (Frontal, Structural)</div>
+    <div class="card-head">Dimorphism Markers</div>
     ${buildDimorphism(m)}
-    <div class="sub">These are population-level statistical tendencies, not diagnostic categories. Jaw width, brow ridge, orbital rim prominence — the strongest structural markers — require profile/3-4 view. Jawline, gonial angle and mandibular angle not assessable frontally.</div>
   </div>
 
   <!-- PRESENTATION NOTES -->
@@ -1431,11 +1226,11 @@ function buildReport(m) {
     ${buildPresNotes(m)}
   </div>
 
-  <!-- METHODOLOGY -->
-  <div class="card">
-    <div class="card-head">Methodology</div>
-    <div class="method-note">MediaPipe 478-point face mesh · frontal view only · pixel-ratio measurements (scale-independent). Trichion (landmark 10) approximates forehead center, not true hairline — upper-third values carry LOW confidence when hairline is ambiguous or receded. Profile-dependent metrics (nasofrontal/nasolabial/nasomental angles, chin projection, orbital vector, maxillary projection) are not reported from a single frontal image. Canon values are descriptive norms derived from published morphometric literature.</div>
-  </div>
+  <!-- METHODOLOGY (collapsible) -->
+  <details class="card">
+    <summary class="card-head">Methodology</summary>
+    <div class="method-note">MediaPipe 478-point face mesh · frontal view only · pixel-ratio measurements (scale-independent). Trichion approximates forehead center, not true hairline — upper-third values carry low confidence when hairline is ambiguous. Profile-dependent metrics (nasolabial/nasomental angles, chin projection, orbital vector) are not reported from a single frontal image. Canon values are descriptive norms from published morphometric literature, not diagnostic categories.</div>
+  </details>
   `;
 }
 
@@ -1729,6 +1524,56 @@ function buildPresNotes(m) {
       <span class="pnlabel" style="color:${n.col}">${n.lbl}.</span>${n.txt}
     </div>
   `).join('');
+}
+
+// ════════════════════════════════════════════════════════════════
+//  COPY RATIOS TO CLIPBOARD
+// ════════════════════════════════════════════════════════════════
+function copyMetrics(btn) {
+  const m = lastMetrics;
+  if (!m) return;
+  const lines = [
+    'MORPHOMETRIC RATIOS',
+    `Facial thirds (upper/mid/lower): ${pct(m.upperPct)} / ${pct(m.midPct)} / ${pct(m.lowerPct)}`,
+    `Eye spacing (ICD ÷ eye width): ${f2(m.icdRatio)}`,
+    `Canthal tilt (L / R): ${sgn(m.lTilt)} / ${sgn(m.rTilt)}`,
+    `Eye aspect ratio (h ÷ w): ${f2(m.avgAR)}`,
+    `Brow–eye distance: ${f2(m.bedFrac)}× eye width`,
+    `Brow arch position (L / R): ${pct(m.lArch * 100)} / ${pct(m.rArch * 100)}`,
+    `Alar ÷ eye spacing: ${f2(m.alarIcdR)}`,
+    `Alar width % of face width: ${pct((m.alarW / m.bizWidth) * 100)}`,
+    `fWHR (width ÷ height): ${f2(m.fWHR)}`,
+    `Jaw taper (jaw ÷ cheekbone): ${f2(m.jawTaper)}`,
+    `Chin taper (chin ÷ jaw): ${f2(m.chinTaper)}`,
+    `Chin height % of lower third: ${pct(m.chinHRatio * 100)}`,
+    `Philtrum % of lower third: ${pct(m.philtrumRatio * 100)}`,
+    `Upper : lower lip fullness: ${f2(m.lipRatio)}`,
+    `Mouth width ÷ alar base: ${f2(m.mouthWAlarR)}`,
+    `Total lip height % of lower third: ${pct(m.lipHeightRatio * 100)}`,
+    `Philtrum : lip+chin: 1 : ${f2(m.ltRatio)}`,
+    `Symmetry — eye ${pct(m.eyeSymm * 100)}, tilt diff ${f1(m.tiltDiff)}°, brow ${f1(m.browSymm)}%, jaw ${f1(m.jawSymm)}%, mouth ${f1(m.mouthSymm)}%`,
+  ];
+  const text = lines.join('\n');
+  const flash = () => {
+    const orig = btn.textContent;
+    btn.textContent = '✓ Copied to clipboard';
+    setTimeout(() => { btn.textContent = orig; }, 1600);
+  };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(flash).catch(() => fallbackCopy(text, flash));
+  } else {
+    fallbackCopy(text, flash);
+  }
+}
+
+function fallbackCopy(text, done) {
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  ta.style.position = 'fixed'; ta.style.top = '0'; ta.style.left = '0'; ta.style.opacity = '0';
+  document.body.appendChild(ta);
+  ta.focus(); ta.select();
+  try { document.execCommand('copy'); if (done) done(); } catch (e) {}
+  document.body.removeChild(ta);
 }
 
 // ════════════════════════════════════════════════════════════════
