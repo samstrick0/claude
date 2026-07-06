@@ -1,0 +1,624 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no" />
+<title>Voice Loop</title>
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Voice Loop" />
+<meta name="theme-color" content="#1a1526" />
+<link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 180 180'%3E%3Crect width='180' height='180' rx='40' fill='%231a1526'/%3E%3Ccircle cx='90' cy='90' r='46' fill='none' stroke='%23f5a3b8' stroke-width='8'/%3E%3Ccircle cx='90' cy='90' r='18' fill='%23f5a3b8'/%3E%3C/svg%3E" />
+<style>
+  :root {
+    --bg-top: #1a1526;
+    --bg-bottom: #241a33;
+    --surface: #2c2340;
+    --surface-2: #362a4d;
+    --line: #48395f;
+    --text: #f1ecf8;
+    --muted: #a394b8;
+    --rec: #f5a3b8;      /* warm rose — recording */
+    --rec-deep: #e56d8f;
+    --play: #7fe3d0;     /* cool aqua — listening back */
+    --play-deep: #4fc9b4;
+    --idle: #8b7aa6;
+  }
+
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+  html, body {
+    margin: 0;
+    height: 100%;
+  }
+
+  body {
+    background: linear-gradient(170deg, var(--bg-top), var(--bg-bottom));
+    color: var(--text);
+    font-family: ui-rounded, "SF Pro Rounded", "Segoe UI", system-ui, -apple-system, sans-serif;
+    min-height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+    overflow-x: hidden;
+  }
+
+  header {
+    text-align: center;
+    padding: 22px 20px 6px;
+  }
+  header h1 {
+    margin: 0;
+    font-size: 19px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+  }
+  header p {
+    margin: 3px 0 0;
+    font-size: 12.5px;
+    color: var(--muted);
+    letter-spacing: 0.3px;
+  }
+
+  main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 26px;
+    padding: 10px 20px 20px;
+  }
+
+  /* --- the orb: signature element --- */
+  .orb-wrap {
+    position: relative;
+    width: 260px;
+    height: 260px;
+    display: grid;
+    place-items: center;
+  }
+  .halo {
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    opacity: 0;
+    transform: scale(0.8);
+    transition: opacity .4s ease;
+  }
+  .orb {
+    position: relative;
+    width: 190px;
+    height: 190px;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    background: radial-gradient(circle at 38% 32%, var(--surface-2), var(--surface));
+    border: 2px solid var(--line);
+    transition: border-color .5s ease, box-shadow .5s ease, transform .5s ease;
+  }
+  .count {
+    font-size: 58px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -1px;
+    line-height: 1;
+  }
+  .count.small { font-size: 26px; font-weight: 600; color: var(--muted); }
+  .phase {
+    margin-top: 10px;
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 1.4px;
+    text-transform: uppercase;
+    color: var(--muted);
+    transition: color .4s ease;
+  }
+
+  /* recording state */
+  body.rec .orb { border-color: var(--rec); box-shadow: 0 0 44px -6px var(--rec-deep); }
+  body.rec .phase { color: var(--rec); }
+  body.rec .halo { background: radial-gradient(circle, var(--rec-deep), transparent 68%); opacity: .32; animation: breathe 2.4s ease-in-out infinite; }
+
+  /* playing state */
+  body.play .orb { border-color: var(--play); box-shadow: 0 0 44px -6px var(--play-deep); }
+  body.play .phase { color: var(--play); }
+  body.play .halo { background: radial-gradient(circle, var(--play-deep), transparent 68%); opacity: .3; animation: breathe 1.8s ease-in-out infinite; }
+
+  @keyframes breathe {
+    0%, 100% { transform: scale(0.82); opacity: .18; }
+    50% { transform: scale(1.05); opacity: .34; }
+  }
+
+  /* --- controls --- */
+  .controls { display: flex; flex-direction: column; align-items: center; gap: 18px; width: 100%; max-width: 340px; }
+
+  .primary {
+    width: 100%;
+    padding: 17px;
+    font-size: 17px;
+    font-weight: 700;
+    letter-spacing: 0.4px;
+    font-family: inherit;
+    color: #1a1526;
+    background: var(--rec);
+    border: none;
+    border-radius: 18px;
+    cursor: pointer;
+    transition: transform .12s ease, background .3s ease, opacity .3s ease;
+  }
+  .primary:active { transform: scale(0.97); }
+  .primary.stop { background: var(--surface-2); color: var(--text); border: 1px solid var(--line); }
+
+  .length {
+    width: 100%;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    padding: 14px 16px;
+  }
+  .length .row { display: flex; align-items: center; justify-content: space-between; }
+  .length label { font-size: 13.5px; color: var(--muted); font-weight: 600; }
+  .length .val { font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .presets { display: flex; gap: 8px; margin-top: 12px; }
+  .presets button {
+    flex: 1;
+    padding: 9px 0;
+    font-size: 14px;
+    font-weight: 600;
+    font-family: inherit;
+    color: var(--muted);
+    background: var(--surface-2);
+    border: 1px solid transparent;
+    border-radius: 11px;
+    cursor: pointer;
+    transition: color .2s, border-color .2s, background .2s;
+  }
+  .presets button.active { color: var(--text); border-color: var(--rec); background: #3a2c47; }
+  .length[aria-disabled="true"] { opacity: .45; pointer-events: none; }
+
+  .hint {
+    font-size: 11.5px;
+    color: var(--muted);
+    text-align: center;
+    line-height: 1.5;
+    max-width: 320px;
+  }
+
+  /* --- clips list --- */
+  .clips { width: 100%; max-width: 340px; }
+  .clips-head { display: flex; align-items: center; justify-content: space-between; margin: 4px 2px 10px; }
+  .clips-head h2 { margin: 0; font-size: 13px; letter-spacing: 1.2px; text-transform: uppercase; color: var(--muted); font-weight: 700; }
+  .clear { background: none; border: none; color: var(--muted); font-size: 12.5px; font-family: inherit; cursor: pointer; padding: 4px; }
+  .clip {
+    display: flex; align-items: center; gap: 12px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 13px;
+    padding: 10px 12px;
+    margin-bottom: 8px;
+  }
+  .clip .idx { font-size: 13px; font-weight: 700; color: var(--muted); min-width: 20px; }
+  .clip .meta { flex: 1; font-size: 12.5px; color: var(--muted); }
+  .clip .meta b { color: var(--text); font-weight: 600; display: block; font-size: 13.5px; }
+  .clip button {
+    border: none; background: var(--surface-2); color: var(--text);
+    width: 38px; height: 38px; border-radius: 10px; cursor: pointer;
+    display: grid; place-items: center; font-family: inherit;
+  }
+  .clip button:active { transform: scale(0.92); }
+  .clip button svg { width: 17px; height: 17px; }
+  .empty { text-align: center; color: var(--muted); font-size: 12.5px; padding: 8px 0 4px; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .halo { animation: none !important; }
+    * { transition-duration: .01ms !important; }
+  }
+</style>
+</head>
+<body>
+  <header>
+    <h1>Voice Loop</h1>
+    <p>Record, hear it back, repeat</p>
+  </header>
+
+  <main>
+    <div class="orb-wrap">
+      <div class="halo"></div>
+      <div class="orb">
+        <div>
+          <div class="count" id="count">20</div>
+        </div>
+      </div>
+    </div>
+    <div class="phase" id="phase">Ready</div>
+
+    <div class="controls">
+      <button class="primary" id="startBtn">Start practice</button>
+
+      <div class="length" id="lengthBox">
+        <div class="row">
+          <label>Segment length</label>
+          <span class="val"><span id="lenVal">20</span>s</span>
+        </div>
+        <div class="presets" id="presets">
+          <button data-s="10">10s</button>
+          <button data-s="15">15s</button>
+          <button data-s="20" class="active">20s</button>
+          <button data-s="30">30s</button>
+          <button data-s="60">60s</button>
+        </div>
+      </div>
+
+      <p class="hint" id="hint">A tone marks each switch, so you can practice without watching the screen. Turn the silent switch off and volume up. Built to hold audio focus so your car won't jump back to music between takes.</p>
+    </div>
+
+    <div class="clips">
+      <div class="clips-head">
+        <h2>This session</h2>
+        <button class="clear" id="clearBtn" hidden>Clear</button>
+      </div>
+      <div id="clipList"><div class="empty">Your recordings will appear here</div></div>
+    </div>
+  </main>
+
+<script>
+(function () {
+  "use strict";
+
+  var duration = 20;              // seconds per segment
+  var running = false;
+  var phase = "idle";             // idle | recording | playing
+  var stream = null;
+  var recorder = null;
+  var chunks = [];
+  var mimeType = "";
+  var clips = [];
+  var timerId = null;
+  var stopTimeout = null;
+  var audioEl = new Audio();
+  audioEl.setAttribute("playsinline", "");
+  var wakeLock = null;
+  var audioCtx = null;
+
+  // --- eyes-free audio cues (Web Audio) ---
+  function ensureAudioCtx() {
+    if (!audioCtx) {
+      var AC = window.AudioContext || window.webkitAudioContext;
+      if (AC) audioCtx = new AC();
+    }
+    if (audioCtx && audioCtx.state === "suspended") audioCtx.resume();
+    return audioCtx;
+  }
+
+  // Plays a short tone pattern, then calls done(). Distinct patterns so you
+  // can tell record vs. playback apart without looking at the screen.
+  function playCue(kind, done) {
+    var ctx = ensureAudioCtx();
+    if (!ctx) { setTimeout(done, 0); return; }
+    var t = ctx.currentTime;
+    function tone(freq, start, len, peak) {
+      var o = ctx.createOscillator(), g = ctx.createGain();
+      o.type = "sine";
+      o.frequency.value = freq;
+      g.gain.setValueAtTime(0.0001, t + start);
+      g.gain.linearRampToValueAtTime(peak, t + start + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + start + len);
+      o.connect(g); g.connect(ctx.destination);
+      o.start(t + start); o.stop(t + start + len + 0.03);
+    }
+    var total;
+    if (kind === "rec") {          // rising two-tone = "speak now"
+      tone(740, 0, 0.13, 0.3);
+      tone(988, 0.17, 0.18, 0.3);
+      total = 380;
+    } else {                       // single lower tone = "listen back"
+      tone(523, 0, 0.24, 0.28);
+      total = 320;
+    }
+    setTimeout(done, total);
+  }
+
+  // --- keep the screen awake during a session ---
+  async function requestWake() {
+    try {
+      if ("wakeLock" in navigator) wakeLock = await navigator.wakeLock.request("screen");
+    } catch (e) { /* ignore */ }
+  }
+  function releaseWake() {
+    try { if (wakeLock) { wakeLock.release(); wakeLock = null; } } catch (e) {}
+  }
+  document.addEventListener("visibilitychange", function () {
+    if (running && document.visibilityState === "visible") requestWake();
+  });
+
+  // --- audio focus: claim it for the whole loop so the car doesn't
+  //     flip back to music between segments ---
+  var mediaRouted = false;
+  function setAudioSession(type) {
+    try {
+      if ("audioSession" in navigator) navigator.audioSession.type = type;
+    } catch (e) { /* older iOS: no-op */ }
+  }
+  // Route the playback element through the same running AudioContext as the
+  // cue tones, so there's one continuous audio pipeline with no silent gap.
+  function routePlayback() {
+    if (mediaRouted) return;
+    var ctx = ensureAudioCtx();
+    if (!ctx || !ctx.createMediaElementSource) return;
+    try {
+      var src = ctx.createMediaElementSource(audioEl);
+      src.connect(ctx.destination);
+      mediaRouted = true;
+    } catch (e) { /* already routed or unsupported */ }
+  }
+  function claimNowPlaying() {
+    try {
+      if ("mediaSession" in navigator && window.MediaMetadata) {
+        navigator.mediaSession.metadata = new MediaMetadata({ title: "Voice Loop", artist: "Practice" });
+        navigator.mediaSession.playbackState = "playing";
+      }
+    } catch (e) {}
+  }
+
+  var els = {
+    body: document.body,
+    count: document.getElementById("count"),
+    phase: document.getElementById("phase"),
+    startBtn: document.getElementById("startBtn"),
+    lengthBox: document.getElementById("lengthBox"),
+    lenVal: document.getElementById("lenVal"),
+    presets: document.getElementById("presets"),
+    hint: document.getElementById("hint"),
+    clipList: document.getElementById("clipList"),
+    clearBtn: document.getElementById("clearBtn")
+  };
+
+  function pickMime() {
+    var candidates = ["audio/mp4", "audio/webm;codecs=opus", "audio/webm", "audio/aac"];
+    if (typeof MediaRecorder === "undefined" || !MediaRecorder.isTypeSupported) return "";
+    for (var i = 0; i < candidates.length; i++) {
+      if (MediaRecorder.isTypeSupported(candidates[i])) return candidates[i];
+    }
+    return "";
+  }
+
+  function ext() {
+    if (mimeType.indexOf("mp4") > -1) return "m4a";
+    if (mimeType.indexOf("webm") > -1) return "webm";
+    if (mimeType.indexOf("aac") > -1) return "aac";
+    return "audio";
+  }
+
+  function setPhase(p) {
+    phase = p;
+    els.body.classList.remove("rec", "play");
+    if (p === "recording") { els.body.classList.add("rec"); els.phase.textContent = "Recording — speak"; }
+    else if (p === "playing") { els.body.classList.add("play"); els.phase.textContent = "Listen back"; }
+    else { els.phase.textContent = running ? "…" : "Ready"; }
+  }
+
+  function showCount(n) { els.count.textContent = n; }
+
+  function startTimer(from, onTick) {
+    clearInterval(timerId);
+    var remaining = from;
+    showCount(remaining);
+    timerId = setInterval(function () {
+      remaining -= 1;
+      if (remaining <= 0) { clearInterval(timerId); showCount(0); return; }
+      showCount(remaining);
+      if (onTick) onTick(remaining);
+    }, 1000);
+  }
+
+  async function ensureStream() {
+    if (stream) return stream;
+    stream = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+    });
+    return stream;
+  }
+
+  function beginRecording() {
+    if (!running) return;
+    setPhase("recording");
+    // Cue first, then start recording — keeps the beep out of your clip.
+    playCue("rec", function () {
+      if (!running) return;
+      chunks = [];
+      var opts = mimeType ? { mimeType: mimeType } : undefined;
+      try { recorder = new MediaRecorder(stream, opts); }
+      catch (e) { recorder = new MediaRecorder(stream); }
+
+      recorder.ondataavailable = function (ev) { if (ev.data && ev.data.size) chunks.push(ev.data); };
+      recorder.onstop = handleStop;
+      recorder.start();
+
+      startTimer(duration);
+      stopTimeout = setTimeout(function () {
+        if (recorder && recorder.state !== "inactive") recorder.stop();
+      }, duration * 1000);
+    });
+  }
+
+  function handleStop() {
+    var type = mimeType || (chunks[0] && chunks[0].type) || "audio/webm";
+    var blob = new Blob(chunks, { type: type });
+    chunks = [];
+    if (blob.size > 0) addClip(blob);
+    if (!running) { setPhase("idle"); return; }
+    if (blob.size > 0) playBack(blob); else beginRecording();
+  }
+
+  function playBack(blob) {
+    setPhase("playing");
+    var url = URL.createObjectURL(blob);
+    audioEl.src = url;
+    var advance = function () {
+      audioEl.onended = null;
+      URL.revokeObjectURL(url);
+      if (running) beginRecording();
+    };
+    playCue("play", function () {
+      if (!running) { URL.revokeObjectURL(url); return; }
+      // count down over the segment length; use real duration once known
+      startTimer(duration);
+      audioEl.onloadedmetadata = function () {
+        if (isFinite(audioEl.duration) && audioEl.duration > 0) {
+          startTimer(Math.max(1, Math.round(audioEl.duration)));
+        }
+      };
+      audioEl.onended = advance;
+      var p = audioEl.play();
+      if (p && p.catch) p.catch(function () {
+        // if playback is blocked, fall back to time-based advance
+        setTimeout(function () { if (phase === "playing" && running) advance(); }, duration * 1000);
+      });
+    });
+  }
+
+  function addClip(blob) {
+    var now = new Date();
+    var item = {
+      blob: blob,
+      url: URL.createObjectURL(blob),
+      time: now,
+      n: clips.length + 1
+    };
+    clips.push(item);
+    renderClips();
+  }
+
+  var playIcon = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>';
+  var dlIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0 0l-4-4m4 4l4-4M5 21h14"/></svg>';
+
+  function renderClips() {
+    if (!clips.length) {
+      els.clipList.innerHTML = '<div class="empty">Your recordings will appear here</div>';
+      els.clearBtn.hidden = true;
+      return;
+    }
+    els.clearBtn.hidden = false;
+    var frag = document.createDocumentFragment();
+    for (var i = clips.length - 1; i >= 0; i--) {
+      (function (c) {
+        var row = document.createElement("div");
+        row.className = "clip";
+        var t = c.time;
+        var hh = String(t.getHours()).padStart(2, "0");
+        var mm = String(t.getMinutes()).padStart(2, "0");
+        var ss = String(t.getSeconds()).padStart(2, "0");
+
+        var idx = document.createElement("div");
+        idx.className = "idx";
+        idx.textContent = c.n;
+
+        var meta = document.createElement("div");
+        meta.className = "meta";
+        meta.innerHTML = "<b>Take " + c.n + "</b>" + hh + ":" + mm + ":" + ss;
+
+        var play = document.createElement("button");
+        play.innerHTML = playIcon;
+        play.setAttribute("aria-label", "Play take " + c.n);
+        play.onclick = function () {
+          if (running) return;
+          var a = new Audio(c.url);
+          a.setAttribute("playsinline", "");
+          a.play();
+        };
+
+        var dl = document.createElement("a");
+        dl.href = c.url;
+        dl.download = "voiceloop-take" + c.n + "-" + hh + mm + ss + "." + ext();
+        var dlBtn = document.createElement("button");
+        dlBtn.innerHTML = dlIcon;
+        dlBtn.setAttribute("aria-label", "Save take " + c.n);
+        dl.appendChild(dlBtn);
+        dl.style.display = "block";
+
+        row.appendChild(idx);
+        row.appendChild(meta);
+        row.appendChild(play);
+        row.appendChild(dl);
+        frag.appendChild(row);
+      })(clips[i]);
+    }
+    els.clipList.innerHTML = "";
+    els.clipList.appendChild(frag);
+  }
+
+  async function start() {
+    // Claim the audio session BEFORE grabbing the mic — this is what keeps
+    // the car's music from resuming during the record→playback handoff.
+    setAudioSession("play-and-record");
+    ensureAudioCtx();   // unlock audio cues within this tap
+    routePlayback();    // one continuous audio pipeline, no gap for music
+    claimNowPlaying();
+    try {
+      await ensureStream();
+    } catch (e) {
+      els.hint.textContent = "Microphone access is needed. Allow it in your browser settings, then try again.";
+      els.hint.style.color = "var(--rec)";
+      setAudioSession("auto");
+      return;
+    }
+    requestWake();      // keep the screen on during practice
+    mimeType = pickMime();
+    running = true;
+    els.startBtn.textContent = "Stop";
+    els.startBtn.classList.add("stop");
+    els.lengthBox.setAttribute("aria-disabled", "true");
+    beginRecording();
+  }
+
+  function stop() {
+    running = false;
+    els.startBtn.textContent = "Start practice";
+    els.startBtn.classList.remove("stop");
+    els.lengthBox.removeAttribute("aria-disabled");
+    clearInterval(timerId);
+    clearTimeout(stopTimeout);
+    releaseWake();
+    try { audioEl.pause(); } catch (e) {}
+    audioEl.onended = null;
+    if (recorder && recorder.state !== "inactive") {
+      try { recorder.stop(); } catch (e) {}
+    }
+    setPhase("idle");
+    showCount(duration);
+    // Hand audio focus back so the car can return to music.
+    setAudioSession("auto");
+    try { if ("mediaSession" in navigator) navigator.mediaSession.playbackState = "none"; } catch (e) {}
+  }
+
+  els.startBtn.onclick = function () { running ? stop() : start(); };
+
+  els.presets.addEventListener("click", function (e) {
+    var btn = e.target.closest("button");
+    if (!btn || running) return;
+    duration = parseInt(btn.getAttribute("data-s"), 10);
+    els.lenVal.textContent = duration;
+    showCount(duration);
+    var all = els.presets.querySelectorAll("button");
+    for (var i = 0; i < all.length; i++) all[i].classList.remove("active");
+    btn.classList.add("active");
+  });
+
+  els.clearBtn.onclick = function () {
+    for (var i = 0; i < clips.length; i++) { try { URL.revokeObjectURL(clips[i].url); } catch (e) {} }
+    clips = [];
+    renderClips();
+  };
+
+  // graceful message if the browser can't record
+  if (!navigator.mediaDevices || typeof MediaRecorder === "undefined") {
+    els.startBtn.disabled = true;
+    els.startBtn.style.opacity = "0.5";
+    els.hint.textContent = "This browser can't record audio. Open the page in Safari or Chrome.";
+    els.hint.style.color = "var(--rec)";
+  }
+})();
+</script>
+</body>
+</html>
