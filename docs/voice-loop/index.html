@@ -280,6 +280,9 @@
   audioEl.setAttribute("playsinline", "");
   var wakeLock = null;
   var audioCtx = null;
+  var loopSource = null;          // current Web Audio source for loop playback
+  var previewAudio = null;        // shared element for manual clip preview
+  var previewingN = null;         // take number currently previewing (or null)
 
   // --- eyes-free audio cues (Web Audio) ---
   function ensureAudioCtx() {
@@ -334,23 +337,10 @@
 
   // --- audio focus: claim it for the whole loop so the car doesn't
   //     flip back to music between segments ---
-  var mediaRouted = false;
   function setAudioSession(type) {
     try {
       if ("audioSession" in navigator) navigator.audioSession.type = type;
     } catch (e) { /* older iOS: no-op */ }
-  }
-  // Route the playback element through the same running AudioContext as the
-  // cue tones, so there's one continuous audio pipeline with no silent gap.
-  function routePlayback() {
-    if (mediaRouted) return;
-    var ctx = ensureAudioCtx();
-    if (!ctx || !ctx.createMediaElementSource) return;
-    try {
-      var src = ctx.createMediaElementSource(audioEl);
-      src.connect(ctx.destination);
-      mediaRouted = true;
-    } catch (e) { /* already routed or unsupported */ }
   }
   function claimNowPlaying() {
     try {
@@ -453,29 +443,61 @@
 
   function playBack(blob) {
     setPhase("playing");
-    var url = URL.createObjectURL(blob);
-    audioEl.src = url;
-    var advance = function () {
-      audioEl.onended = null;
-      URL.revokeObjectURL(url);
-      if (running) beginRecording();
-    };
+    // Cue first, then play the take back.
     playCue("play", function () {
-      if (!running) { URL.revokeObjectURL(url); return; }
-      // count down over the segment length; use real duration once known
-      startTimer(duration);
-      audioEl.onloadedmetadata = function () {
-        if (isFinite(audioEl.duration) && audioEl.duration > 0) {
-          startTimer(Math.max(1, Math.round(audioEl.duration)));
-        }
-      };
-      audioEl.onended = advance;
-      var p = audioEl.play();
-      if (p && p.catch) p.catch(function () {
-        // if playback is blocked, fall back to time-based advance
-        setTimeout(function () { if (phase === "playing" && running) advance(); }, duration * 1000);
-      });
+      if (!running) return;
+      playLoopClip(blob);
     });
+  }
+
+  // Play a recorded take as part of the running loop. iOS Safari blocks a
+  // media element's play() unless it's tied to a fresh tap, so we decode the
+  // blob and play it through the already-unlocked AudioContext, which has no
+  // such restriction. Falls back to an <audio> element, then to a plain timer,
+  // so the record→playback→record loop can never stall.
+  function playLoopClip(blob) {
+    var ctx = ensureAudioCtx();
+    var advanced = false;
+    function advance() {
+      if (advanced) return;
+      advanced = true;
+      loopSource = null;
+      if (running) beginRecording();
+    }
+
+    function fallbackElement() {
+      var url = URL.createObjectURL(blob);
+      audioEl.src = url;
+      startTimer(duration);
+      audioEl.onended = function () {
+        audioEl.onended = null;
+        URL.revokeObjectURL(url);
+        advance();
+      };
+      var p = audioEl.play();
+      if (p && p.catch) p.catch(function () { /* silent — safety net advances */ });
+      // Safety net: advance even if playback is blocked or onended never fires.
+      setTimeout(function () { try { URL.revokeObjectURL(url); } catch (e) {} advance(); }, (duration + 2) * 1000);
+    }
+
+    if (!ctx || !ctx.decodeAudioData || !blob.arrayBuffer) { fallbackElement(); return; }
+
+    blob.arrayBuffer().then(function (buf) {
+      ctx.decodeAudioData(buf, function (audioBuf) {
+        if (!running) return;
+        try {
+          var src = ctx.createBufferSource();
+          src.buffer = audioBuf;
+          src.connect(ctx.destination);
+          src.onended = advance;
+          src.start();
+          loopSource = src;
+          startTimer(Math.max(1, Math.round(audioBuf.duration)));
+          // Safety net in case onended doesn't fire on this platform.
+          setTimeout(advance, (audioBuf.duration + 1.5) * 1000);
+        } catch (e) { fallbackElement(); }
+      }, function () { fallbackElement(); });
+    }).catch(function () { fallbackElement(); });
   }
 
   function addClip(blob) {
@@ -491,7 +513,38 @@
   }
 
   var playIcon = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>';
+  var pauseIcon = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 5h4v14H6zM14 5h4v14h-4z"/></svg>';
   var dlIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0 0l-4-4m4 4l4-4M5 21h14"/></svg>';
+
+  // Manual clip preview: one shared element so takes never stack, and tapping
+  // a playing take pauses it.
+  function resetPreviewIcons() {
+    var btns = els.clipList.querySelectorAll(".play-btn");
+    for (var i = 0; i < btns.length; i++) btns[i].innerHTML = playIcon;
+  }
+  function stopPreview() {
+    if (previewAudio) {
+      try { previewAudio.pause(); } catch (e) {}
+      previewAudio.onended = null;
+      previewAudio = null;
+    }
+    previewingN = null;
+    resetPreviewIcons();
+  }
+  function togglePreview(clip, btn) {
+    // Tapping the take that's already playing stops it.
+    if (previewingN === clip.n) { stopPreview(); return; }
+    // Otherwise stop whatever's playing and start this one.
+    stopPreview();
+    var a = new Audio(clip.url);
+    a.setAttribute("playsinline", "");
+    a.onended = function () { stopPreview(); };
+    previewAudio = a;
+    previewingN = clip.n;
+    btn.innerHTML = pauseIcon;
+    var p = a.play();
+    if (p && p.catch) p.catch(function () { stopPreview(); });
+  }
 
   function renderClips() {
     if (!clips.length) {
@@ -519,13 +572,12 @@
         meta.innerHTML = "<b>Take " + c.n + "</b>" + hh + ":" + mm + ":" + ss;
 
         var play = document.createElement("button");
-        play.innerHTML = playIcon;
+        play.className = "play-btn";
+        play.innerHTML = (previewingN === c.n) ? pauseIcon : playIcon;
         play.setAttribute("aria-label", "Play take " + c.n);
         play.onclick = function () {
           if (running) return;
-          var a = new Audio(c.url);
-          a.setAttribute("playsinline", "");
-          a.play();
+          togglePreview(c, play);
         };
 
         var dl = document.createElement("a");
@@ -551,9 +603,9 @@
   async function start() {
     // Claim the audio session BEFORE grabbing the mic — this is what keeps
     // the car's music from resuming during the record→playback handoff.
+    stopPreview();      // don't let a manual preview run into the session
     setAudioSession("play-and-record");
-    ensureAudioCtx();   // unlock audio cues within this tap
-    routePlayback();    // one continuous audio pipeline, no gap for music
+    ensureAudioCtx();   // unlock audio cues + buffer playback within this tap
     claimNowPlaying();
     try {
       await ensureStream();
@@ -582,6 +634,10 @@
     releaseWake();
     try { audioEl.pause(); } catch (e) {}
     audioEl.onended = null;
+    if (loopSource) {
+      try { loopSource.onended = null; loopSource.stop(); } catch (e) {}
+      loopSource = null;
+    }
     if (recorder && recorder.state !== "inactive") {
       try { recorder.stop(); } catch (e) {}
     }
@@ -606,6 +662,7 @@
   });
 
   els.clearBtn.onclick = function () {
+    stopPreview();
     for (var i = 0; i < clips.length; i++) { try { URL.revokeObjectURL(clips[i].url); } catch (e) {} }
     clips = [];
     renderClips();
