@@ -70,7 +70,7 @@
     font-weight: 800;
     letter-spacing: 0.8px;
     color: #1a1526;
-    background: #ffcf5c;   /* v3 */
+    background: #9bf06b;   /* v4 */
   }
 
   main {
@@ -198,6 +198,30 @@
     max-width: 320px;
   }
 
+  /* --- debug log --- */
+  .log { width: 100%; max-width: 340px; margin-top: 4px; }
+  .log > summary {
+    list-style: none; cursor: pointer;
+    font-size: 11px; letter-spacing: 1px; text-transform: uppercase;
+    color: var(--muted); font-weight: 700; padding: 6px 2px;
+  }
+  .log > summary::-webkit-details-marker { display: none; }
+  .log > summary::after { content: " ▸"; }
+  .log[open] > summary::after { content: " ▾"; }
+  .log-actions { display: flex; gap: 8px; margin: 4px 0 8px; }
+  .log-actions button {
+    flex: 1; padding: 8px 0; font-size: 12px; font-weight: 600; font-family: inherit;
+    color: var(--muted); background: var(--surface-2); border: 1px solid var(--line);
+    border-radius: 10px; cursor: pointer;
+  }
+  .log pre {
+    margin: 0; max-height: 200px; overflow: auto;
+    background: #16121f; border: 1px solid var(--line); border-radius: 10px;
+    padding: 10px; font-size: 11px; line-height: 1.5;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    color: #cbbfe0; white-space: pre-wrap; word-break: break-word;
+  }
+
   @media (prefers-reduced-motion: reduce) {
     .halo { animation: none !important; }
     * { transition-duration: .01ms !important; }
@@ -208,7 +232,7 @@
   <header>
     <h1>Voice Loop</h1>
     <p>Record, hear it back, repeat</p>
-    <div class="version" id="version">v3</div>
+    <div class="version" id="version">v4</div>
   </header>
 
   <main>
@@ -241,6 +265,15 @@
 
       <p class="hint" id="hint">A tone marks each switch, so you can practice without watching the screen. Turn the silent switch off and volume up. Built to hold audio focus so your car won't jump back to music between takes.</p>
     </div>
+
+    <details class="log" id="logBox">
+      <summary>Debug log</summary>
+      <div class="log-actions">
+        <button id="copyLog" type="button">Copy</button>
+        <button id="clearLog" type="button">Clear</button>
+      </div>
+      <pre id="logOut">(events will appear here while you use the app)</pre>
+    </details>
   </main>
 
 <script>
@@ -261,6 +294,23 @@
   var wakeLock = null;
   var audioCtx = null;
   var loopSource = null;          // current Web Audio source for loop playback
+  var recordArmed = false;        // guard: a segment is already starting/recording
+  var emptyStreak = 0;            // consecutive empty recordings (iOS mic glitch)
+  var logLines = [];              // on-screen diagnostic log
+
+  // --- on-screen diagnostic log (readable on a phone, with a Copy button) ---
+  function log(msg) {
+    var d = new Date();
+    var ts = String(d.getMinutes()).padStart(2, "0") + ":" +
+             String(d.getSeconds()).padStart(2, "0") + "." +
+             String(d.getMilliseconds()).padStart(3, "0");
+    logLines.push(ts + "  " + msg);
+    if (logLines.length > 80) logLines.shift();
+    var out = document.getElementById("logOut");
+    if (out) out.textContent = logLines.join("\n");
+  }
+  window.addEventListener("error", function (e) { log("JS ERROR: " + (e.message || e.error)); });
+  window.addEventListener("unhandledrejection", function (e) { log("PROMISE REJECT: " + (e.reason && e.reason.message ? e.reason.message : e.reason)); });
 
   // --- eyes-free audio cues (Web Audio) ---
   function ensureAudioCtx() {
@@ -380,33 +430,65 @@
   }
 
   function beginRecording() {
-    if (!running) return;
+    // Guard: never let a second segment start on top of one already going —
+    // that was resetting the countdown and stacking recorders.
+    if (!running || recordArmed) return;
+    recordArmed = true;
     setPhase("recording");
     // Cue first, then start recording — keeps the beep out of your clip.
     playCue("rec", function () {
-      if (!running) return;
+      if (!running) { recordArmed = false; return; }
       chunks = [];
-      var opts = mimeType ? { mimeType: mimeType } : undefined;
-      try { recorder = new MediaRecorder(stream, opts); }
-      catch (e) { recorder = new MediaRecorder(stream); }
-
-      recorder.ondataavailable = function (ev) { if (ev.data && ev.data.size) chunks.push(ev.data); };
-      recorder.onstop = handleStop;
-      recorder.start();
-
+      // Reuse the one recorder created for this session. Creating a fresh
+      // MediaRecorder per segment is unreliable on iOS (2nd+ yields no data).
+      if (!recorder) { log("no recorder — aborting"); recordArmed = false; stop(); return; }
+      try {
+        recorder.start();
+        log("rec start (" + duration + "s)");
+      } catch (e) {
+        log("rec start FAILED: " + e);
+        recordArmed = false;
+        stop();
+        return;
+      }
       startTimer(duration);
-      stopTimeout = setTimeout(function () {
-        if (recorder && recorder.state !== "inactive") recorder.stop();
-      }, duration * 1000);
+      clearTimeout(stopTimeout);
+      stopTimeout = setTimeout(stopRecorder, duration * 1000);
     });
   }
 
+  function stopRecorder() {
+    clearTimeout(stopTimeout);
+    if (recorder && recorder.state === "recording") {
+      try { recorder.stop(); } catch (e) { log("rec stop FAILED: " + e); }
+    }
+  }
+
   function handleStop() {
+    recordArmed = false;
+    clearTimeout(stopTimeout);
     var type = mimeType || (chunks[0] && chunks[0].type) || "audio/webm";
     var blob = new Blob(chunks, { type: type });
+    var size = blob.size;
     chunks = [];
+    log("rec stop: blob " + size + " bytes");
     if (!running) { setPhase("idle"); return; }
-    if (blob.size > 0) playBack(blob); else beginRecording();
+    if (size > 0) {
+      emptyStreak = 0;
+      playBack(blob);
+    } else {
+      // Empty recording (mic glitch). Retry a few times, but never loop forever.
+      emptyStreak++;
+      log("EMPTY recording (" + emptyStreak + ")");
+      if (emptyStreak >= 4) {
+        log("4 empty in a row — stopping. Mic may need a fresh start.");
+        els.hint.textContent = "Recording came back empty repeatedly. Tap Stop, then Start practice again.";
+        els.hint.style.color = "var(--rec)";
+        stop();
+      } else {
+        beginRecording();
+      }
+    }
   }
 
   function playBack(blob) {
@@ -426,14 +508,20 @@
   function playLoopClip(blob) {
     var ctx = ensureAudioCtx();
     var advanced = false;
+    // Universal safety-net: no matter what happens below (decode hangs,
+    // playback is blocked, onended never fires), the loop advances so it can
+    // never get stuck in "playing". Scheduled up front, before any async work.
+    var guard = setTimeout(function () { log("playback safety-net → next segment"); advance(); }, (duration + 3) * 1000);
     function advance() {
       if (advanced) return;
       advanced = true;
+      clearTimeout(guard);
       loopSource = null;
       if (running) beginRecording();
     }
 
     function fallbackElement() {
+      log("playback via <audio> fallback");
       var url = URL.createObjectURL(blob);
       audioEl.src = url;
       startTimer(duration);
@@ -443,9 +531,7 @@
         advance();
       };
       var p = audioEl.play();
-      if (p && p.catch) p.catch(function () { /* silent — safety net advances */ });
-      // Safety net: advance even if playback is blocked or onended never fires.
-      setTimeout(function () { try { URL.revokeObjectURL(url); } catch (e) {} advance(); }, (duration + 2) * 1000);
+      if (p && p.catch) p.catch(function (e) { log("audio.play blocked: " + e); });
     }
 
     if (!ctx || !ctx.decodeAudioData || !blob.arrayBuffer) { fallbackElement(); return; }
@@ -460,12 +546,11 @@
           src.onended = advance;
           src.start();
           loopSource = src;
+          log("playback start (" + audioBuf.duration.toFixed(1) + "s)");
           startTimer(Math.max(1, Math.round(audioBuf.duration)));
-          // Safety net in case onended doesn't fire on this platform.
-          setTimeout(advance, (audioBuf.duration + 1.5) * 1000);
-        } catch (e) { fallbackElement(); }
-      }, function () { fallbackElement(); });
-    }).catch(function () { fallbackElement(); });
+        } catch (e) { log("buffer play failed: " + e); fallbackElement(); }
+      }, function (e) { log("decode failed: " + e); fallbackElement(); });
+    }).catch(function (e) { log("arrayBuffer failed: " + e); fallbackElement(); });
   }
 
   async function start() {
@@ -482,17 +567,37 @@
       setAudioSession("auto");
       return;
     }
-    requestWake();      // keep the screen on during practice
     mimeType = pickMime();
+    // One recorder for the whole session, reused every segment. Creating a new
+    // MediaRecorder per segment is what iOS chokes on.
+    try {
+      var opts = mimeType ? { mimeType: mimeType } : undefined;
+      try { recorder = new MediaRecorder(stream, opts); }
+      catch (e) { recorder = new MediaRecorder(stream); }
+    } catch (e) {
+      log("MediaRecorder create FAILED: " + e);
+      els.hint.textContent = "This browser could not start the recorder.";
+      els.hint.style.color = "var(--rec)";
+      setAudioSession("auto");
+      return;
+    }
+    recorder.ondataavailable = function (ev) { if (ev.data && ev.data.size) chunks.push(ev.data); };
+    recorder.onstop = handleStop;
+    requestWake();      // keep the screen on during practice
+    recordArmed = false;
+    emptyStreak = 0;
     running = true;
     els.startBtn.textContent = "Stop";
     els.startBtn.classList.add("stop");
     els.lengthBox.setAttribute("aria-disabled", "true");
+    log("session start · " + (mimeType || "default mime") + " · " + duration + "s segments");
     beginRecording();
   }
 
   function stop() {
     running = false;
+    recordArmed = false;
+    log("session stop");
     els.startBtn.textContent = "Start practice";
     els.startBtn.classList.remove("stop");
     els.lengthBox.removeAttribute("aria-disabled");
@@ -527,6 +632,21 @@
     for (var i = 0; i < all.length; i++) all[i].classList.remove("active");
     btn.classList.add("active");
   });
+
+  document.getElementById("copyLog").onclick = function () {
+    var text = logLines.join("\n") || "(empty)";
+    var btn = this;
+    var flash = function () { var o = btn.textContent; btn.textContent = "Copied ✓"; setTimeout(function () { btn.textContent = o; }, 1500); };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(flash).catch(function () { window.prompt("Copy the log:", text); });
+    } else {
+      window.prompt("Copy the log:", text);
+    }
+  };
+  document.getElementById("clearLog").onclick = function () {
+    logLines = [];
+    document.getElementById("logOut").textContent = "(cleared)";
+  };
 
   // graceful message if the browser can't record
   if (!navigator.mediaDevices || typeof MediaRecorder === "undefined") {
