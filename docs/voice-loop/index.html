@@ -70,7 +70,7 @@
     font-weight: 800;
     letter-spacing: 0.8px;
     color: #1a1526;
-    background: #9bf06b;   /* v4 */
+    background: #d6a3ff;   /* v5 */
   }
 
   main {
@@ -198,6 +198,29 @@
     max-width: 320px;
   }
 
+  /* --- microphone picker --- */
+  .mic-select {
+    width: 100%;
+    margin-top: 12px;
+    padding: 11px 12px;
+    font-size: 14px;
+    font-weight: 600;
+    font-family: inherit;
+    color: var(--text);
+    background: var(--surface-2);
+    border: 1px solid var(--line);
+    border-radius: 11px;
+    -webkit-appearance: none;
+    appearance: none;
+  }
+  .mic-now {
+    margin-top: 11px;
+    font-size: 11.5px;
+    color: var(--muted);
+    line-height: 1.45;
+  }
+  .mic-now b { color: var(--play); font-weight: 700; }
+
   /* --- debug log --- */
   .log { width: 100%; max-width: 340px; margin-top: 4px; }
   .log > summary {
@@ -232,7 +255,7 @@
   <header>
     <h1>Voice Loop</h1>
     <p>Record, hear it back, repeat</p>
-    <div class="version" id="version">v4</div>
+    <div class="version" id="version">v5</div>
   </header>
 
   <main>
@@ -261,6 +284,16 @@
           <button data-s="30">30s</button>
           <button data-s="60">60s</button>
         </div>
+      </div>
+
+      <div class="length" id="micBox">
+        <div class="row">
+          <label>Microphone</label>
+        </div>
+        <select class="mic-select" id="micSelect">
+          <option value="">Default (phone chooses)</option>
+        </select>
+        <div class="mic-now" id="micNow">The active source appears here once you start.</div>
       </div>
 
       <p class="hint" id="hint">A tone marks each switch, so you can practice without watching the screen. Turn the silent switch off and volume up. Built to hold audio focus so your car won't jump back to music between takes.</p>
@@ -297,6 +330,9 @@
   var recordArmed = false;        // guard: a segment is already starting/recording
   var emptyStreak = 0;            // consecutive empty recordings (iOS mic glitch)
   var logLines = [];              // on-screen diagnostic log
+  var selectedDeviceId = "";      // chosen mic ("" = let the phone decide)
+  var streamDeviceId = null;      // deviceId the cached stream was opened with
+  try { selectedDeviceId = localStorage.getItem("vl_mic") || ""; } catch (e) {}
 
   // --- on-screen diagnostic log (readable on a phone, with a Copy button) ---
   function log(msg) {
@@ -387,8 +423,17 @@
     lengthBox: document.getElementById("lengthBox"),
     lenVal: document.getElementById("lenVal"),
     presets: document.getElementById("presets"),
-    hint: document.getElementById("hint")
+    hint: document.getElementById("hint"),
+    micBox: document.getElementById("micBox"),
+    micSelect: document.getElementById("micSelect"),
+    micNow: document.getElementById("micNow")
   };
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"]/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c];
+    });
+  }
 
   function pickMime() {
     var candidates = ["audio/mp4", "audio/webm;codecs=opus", "audio/webm", "audio/aac"];
@@ -421,12 +466,58 @@
     }, 1000);
   }
 
+  function baseAudioConstraints() {
+    return { echoCancellation: true, noiseSuppression: true, autoGainControl: true };
+  }
+
   async function ensureStream() {
-    if (stream) return stream;
-    stream = await navigator.mediaDevices.getUserMedia({
-      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
-    });
+    // Reuse the cached stream only if it's on the mic we currently want.
+    if (stream && streamDeviceId === selectedDeviceId) return stream;
+    if (stream) { try { stream.getTracks().forEach(function (t) { t.stop(); }); } catch (e) {} stream = null; }
+    var constraints = baseAudioConstraints();
+    if (selectedDeviceId) constraints.deviceId = { exact: selectedDeviceId };
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: constraints });
+    } catch (e) {
+      // The chosen mic may be gone (unplugged Bluetooth, etc.) — fall back to default.
+      if (selectedDeviceId) {
+        log("mic unavailable, using default: " + e);
+        selectedDeviceId = "";
+        try { localStorage.setItem("vl_mic", ""); } catch (e2) {}
+        stream = await navigator.mediaDevices.getUserMedia({ audio: baseAudioConstraints() });
+      } else {
+        throw e;
+      }
+    }
+    streamDeviceId = selectedDeviceId;
     return stream;
+  }
+
+  // Populate the mic picker. Labels are only exposed after mic permission,
+  // so this fills in real names once a session has been started at least once.
+  async function refreshMics() {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) return;
+    try {
+      var devices = await navigator.mediaDevices.enumerateDevices();
+      var inputs = devices.filter(function (d) { return d.kind === "audioinput"; });
+      var sel = els.micSelect;
+      sel.innerHTML = "";
+      var def = document.createElement("option");
+      def.value = ""; def.textContent = "Default (phone chooses)";
+      sel.appendChild(def);
+      inputs.forEach(function (d, i) {
+        var o = document.createElement("option");
+        o.value = d.deviceId;
+        o.textContent = d.label || ("Microphone " + (i + 1));
+        sel.appendChild(o);
+      });
+      sel.value = selectedDeviceId;
+      if (sel.value !== selectedDeviceId) { selectedDeviceId = ""; sel.value = ""; }
+    } catch (e) { log("enumerate failed: " + e); }
+  }
+  if (navigator.mediaDevices) {
+    try { navigator.mediaDevices.addEventListener("devicechange", refreshMics); } catch (e) {}
+    refreshMics();
   }
 
   function beginRecording() {
@@ -567,6 +658,12 @@
       setAudioSession("auto");
       return;
     }
+    // Show which mic is actually in use so the source is never a mystery.
+    var track = stream.getAudioTracks()[0];
+    var micLabel = (track && track.label) ? track.label : "default microphone";
+    els.micNow.innerHTML = "Recording from: <b>" + escapeHtml(micLabel) + "</b>";
+    log("mic: " + micLabel);
+    refreshMics();      // labels are available now that permission is granted
     mimeType = pickMime();
     // One recorder for the whole session, reused every segment. Creating a new
     // MediaRecorder per segment is what iOS chokes on.
@@ -590,6 +687,8 @@
     els.startBtn.textContent = "Stop";
     els.startBtn.classList.add("stop");
     els.lengthBox.setAttribute("aria-disabled", "true");
+    els.micBox.setAttribute("aria-disabled", "true");
+    els.micSelect.disabled = true;
     log("session start · " + (mimeType || "default mime") + " · " + duration + "s segments");
     beginRecording();
   }
@@ -601,6 +700,8 @@
     els.startBtn.textContent = "Start practice";
     els.startBtn.classList.remove("stop");
     els.lengthBox.removeAttribute("aria-disabled");
+    els.micBox.removeAttribute("aria-disabled");
+    els.micSelect.disabled = false;
     clearInterval(timerId);
     clearTimeout(stopTimeout);
     releaseWake();
@@ -631,6 +732,17 @@
     var all = els.presets.querySelectorAll("button");
     for (var i = 0; i < all.length; i++) all[i].classList.remove("active");
     btn.classList.add("active");
+  });
+
+  els.micSelect.addEventListener("change", function () {
+    if (running) return;   // picker is disabled mid-session anyway
+    selectedDeviceId = els.micSelect.value;
+    try { localStorage.setItem("vl_mic", selectedDeviceId); } catch (e) {}
+    // Drop the cached stream so the newly chosen mic is opened on next start.
+    if (stream) { try { stream.getTracks().forEach(function (t) { t.stop(); }); } catch (e) {} stream = null; streamDeviceId = null; }
+    var name = els.micSelect.options[els.micSelect.selectedIndex].textContent;
+    els.micNow.innerHTML = "Will record from: <b>" + escapeHtml(name) + "</b> on next start.";
+    log("mic selection: " + (selectedDeviceId || "default"));
   });
 
   document.getElementById("copyLog").onclick = function () {
