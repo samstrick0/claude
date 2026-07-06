@@ -70,7 +70,7 @@
     font-weight: 800;
     letter-spacing: 0.8px;
     color: #1a1526;
-    background: #d6a3ff;   /* v5 */
+    background: #ffb066;   /* v6 */
   }
 
   main {
@@ -255,7 +255,7 @@
   <header>
     <h1>Voice Loop</h1>
     <p>Record, hear it back, repeat</p>
-    <div class="version" id="version">v5</div>
+    <div class="version" id="version">v6</div>
   </header>
 
   <main>
@@ -293,7 +293,7 @@
         <select class="mic-select" id="micSelect">
           <option value="">Default (phone chooses)</option>
         </select>
-        <div class="mic-now" id="micNow">The active source appears here once you start.</div>
+        <div class="mic-now" id="micNow">Pick a mic to see the real source (iOS menu labels can be reversed).</div>
       </div>
 
       <p class="hint" id="hint">A tone marks each switch, so you can practice without watching the screen. Turn the silent switch off and volume up. Built to hold audio focus so your car won't jump back to music between takes.</p>
@@ -491,6 +491,31 @@
     }
     streamDeviceId = selectedDeviceId;
     return stream;
+  }
+
+  // iOS labels the two inputs unreliably — picking "CarPlay" can actually open
+  // the phone mic and vice-versa. So when a choice is made, briefly open it and
+  // report the REAL source the track resolves to, rather than trusting the menu.
+  async function probeSelectedMic() {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return;
+    els.micNow.textContent = "Checking that microphone…";
+    if (stream) { try { stream.getTracks().forEach(function (t) { t.stop(); }); } catch (e) {} stream = null; streamDeviceId = null; }
+    var constraints = baseAudioConstraints();
+    if (selectedDeviceId) constraints.deviceId = { exact: selectedDeviceId };
+    try {
+      var s = await navigator.mediaDevices.getUserMedia({ audio: constraints });
+      var track = s.getAudioTracks()[0];
+      var actual = (track && track.label) ? track.label : "default microphone";
+      var settings = (track && track.getSettings) ? track.getSettings() : {};
+      els.micNow.innerHTML = "This option actually records from: <b>" + escapeHtml(actual) + "</b>";
+      log("probe: chose '" + (selectedDeviceId || "default") + "' → real source '" + actual + "' (id " + (settings.deviceId || "?") + ")");
+      // Done probing — release the mic so it isn't held open before you start.
+      try { s.getTracks().forEach(function (t) { t.stop(); }); } catch (e) {}
+      refreshMics();
+    } catch (e) {
+      log("probe failed: " + e);
+      els.micNow.textContent = "Could not open that microphone — it may be unavailable.";
+    }
   }
 
   // Populate the mic picker. Labels are only exposed after mic permission,
@@ -738,11 +763,9 @@
     if (running) return;   // picker is disabled mid-session anyway
     selectedDeviceId = els.micSelect.value;
     try { localStorage.setItem("vl_mic", selectedDeviceId); } catch (e) {}
-    // Drop the cached stream so the newly chosen mic is opened on next start.
-    if (stream) { try { stream.getTracks().forEach(function (t) { t.stop(); }); } catch (e) {} stream = null; streamDeviceId = null; }
-    var name = els.micSelect.options[els.micSelect.selectedIndex].textContent;
-    els.micNow.innerHTML = "Will record from: <b>" + escapeHtml(name) + "</b> on next start.";
     log("mic selection: " + (selectedDeviceId || "default"));
+    // Verify what this option really opens (iOS labels can be reversed).
+    probeSelectedMic();
   });
 
   document.getElementById("copyLog").onclick = function () {
