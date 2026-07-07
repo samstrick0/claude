@@ -22,6 +22,8 @@
     --rec-deep: #e56d8f;
     --play: #7fe3d0;     /* cool aqua — listening back */
     --play-deep: #4fc9b4;
+    --good: #7ef29b;
+    --res: #ffd27a;      /* gold — resonance */
     --idle: #8b7aa6;
   }
 
@@ -45,7 +47,7 @@
 
   header {
     text-align: center;
-    padding: 22px 20px 6px;
+    padding: 20px 20px 4px;
   }
   header h1 {
     margin: 0;
@@ -70,24 +72,60 @@
     font-weight: 800;
     letter-spacing: 0.8px;
     color: #1a1526;
-    background: #ffd24d;   /* v8 */
+    background: #7fd0ff;   /* v9 */
   }
+
+  /* --- tab bar --- */
+  .tabs {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    display: flex;
+    gap: 7px;
+    width: 100%;
+    max-width: 380px;
+    margin: 10px auto 0;
+    padding: 8px 20px;
+    background: rgba(26, 21, 38, 0.92);
+    -webkit-backdrop-filter: blur(10px);
+    backdrop-filter: blur(10px);
+  }
+  .tabs button {
+    flex: 1;
+    padding: 10px 0;
+    font-size: 14px;
+    font-weight: 700;
+    font-family: inherit;
+    color: var(--muted);
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    cursor: pointer;
+    transition: color .2s, border-color .2s, background .2s;
+  }
+  .tabs button.active { color: var(--text); border-color: var(--rec); background: #3a2c47; }
 
   main {
     flex: 1;
+    width: 100%;
+    max-width: 380px;
+    margin: 0 auto;
+    padding: 12px 20px 26px;
+  }
+  section[hidden] { display: none; }
+  section {
     display: flex;
     flex-direction: column;
     align-items: center;
-    justify-content: center;
-    gap: 26px;
-    padding: 10px 20px 20px;
+    gap: 16px;
   }
 
   /* --- the orb: signature element --- */
   .orb-wrap {
     position: relative;
-    width: 260px;
-    height: 260px;
+    width: 264px;
+    height: 264px;
+    margin-top: 6px;
     display: grid;
     place-items: center;
   }
@@ -101,8 +139,8 @@
   }
   .orb {
     position: relative;
-    width: 190px;
-    height: 190px;
+    width: 186px;
+    height: 186px;
     border-radius: 50%;
     display: grid;
     place-items: center;
@@ -111,15 +149,13 @@
     transition: border-color .5s ease, box-shadow .5s ease, transform .5s ease;
   }
   .count {
-    font-size: 58px;
+    font-size: 56px;
     font-weight: 700;
     font-variant-numeric: tabular-nums;
     letter-spacing: -1px;
     line-height: 1;
   }
-  .count.small { font-size: 26px; font-weight: 600; color: var(--muted); }
   .phase {
-    margin-top: 10px;
     font-size: 13px;
     font-weight: 600;
     letter-spacing: 1.4px;
@@ -143,9 +179,76 @@
     50% { transform: scale(1.05); opacity: .34; }
   }
 
-  /* --- controls --- */
-  .controls { display: flex; flex-direction: column; align-items: center; gap: 18px; width: 100%; max-width: 340px; }
+  /* --- live meters: resonance (left) and pitch (right), shown while recording --- */
+  .meter {
+    position: absolute;
+    top: 22px; bottom: 34px;
+    width: 13px;
+    border-radius: 8px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    overflow: hidden;
+    opacity: 0;
+    transition: opacity .3s ease;
+  }
+  body.rec .meter { opacity: 1; }
+  .meter.left { left: 2px; background: linear-gradient(to top, #241a33, #4a3a2a 45%, #7a6636); }
+  .meter.right { right: 2px; }
+  .meter-band {
+    position: absolute; left: 0; right: 0;
+    background: rgba(126,242,155,.22);
+    border-top: 1px solid rgba(126,242,155,.65);
+    border-bottom: 1px solid rgba(126,242,155,.65);
+  }
+  .meter-dot {
+    position: absolute; left: 50%; top: 50%;
+    width: 17px; height: 17px; margin-left: -8.5px; margin-top: -8.5px;
+    border-radius: 50%;
+    background: var(--rec);
+    box-shadow: 0 0 8px rgba(0,0,0,.5);
+    opacity: .25;
+    transition: top .09s linear, background .15s ease, opacity .2s ease;
+  }
+  .meter.left .meter-dot { background: var(--res); transition-duration: .12s; }
+  .meter-dot.inband { background: var(--good); }
+  .meter-tag {
+    position: absolute;
+    bottom: 12px;
+    font-size: 9.5px;
+    font-weight: 800;
+    letter-spacing: 1px;
+    color: var(--muted);
+    opacity: 0;
+    transition: opacity .3s ease;
+  }
+  body.rec .meter-tag { opacity: 1; }
+  .meter-tag.left { left: 0; }
+  .meter-tag.right { right: 0; }
 
+  .live-lines {
+    min-height: 40px;
+    text-align: center;
+    line-height: 1.55;
+  }
+  .pitch-live {
+    font-size: 13.5px;
+    font-weight: 700;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: .3px;
+  }
+  .pitch-live b { color: var(--rec); }
+  .pitch-live.inband b { color: var(--good); }
+  .res-live {
+    font-size: 12.5px;
+    font-weight: 700;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: .3px;
+  }
+  .res-live b { color: var(--res); }
+
+  /* --- buttons --- */
   .primary {
     width: 100%;
     padding: 17px;
@@ -162,17 +265,46 @@
   }
   .primary:active { transform: scale(0.97); }
   .primary.stop { background: var(--surface-2); color: var(--text); border: 1px solid var(--line); }
+  .primary:disabled { opacity: .45; }
+  .secondary {
+    padding: 10px 14px;
+    font-size: 13px;
+    font-weight: 700;
+    font-family: inherit;
+    color: var(--text);
+    background: var(--surface-2);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    cursor: pointer;
+  }
 
-  .length {
+  .note {
+    min-height: 0;
+    font-size: 12px;
+    color: var(--muted);
+    text-align: center;
+    line-height: 1.5;
+  }
+  .note.warn { color: var(--rec); }
+
+  /* --- cards --- */
+  .card {
     width: 100%;
     background: var(--surface);
     border: 1px solid var(--line);
     border-radius: 16px;
     padding: 14px 16px;
   }
-  .length .row { display: flex; align-items: center; justify-content: space-between; }
-  .length label { font-size: 13.5px; color: var(--muted); font-weight: 600; }
-  .length .val { font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .card-head {
+    font-size: 11px; letter-spacing: 1px; text-transform: uppercase;
+    color: var(--muted); font-weight: 700; margin-bottom: 10px;
+  }
+  .card .row { display: flex; align-items: center; justify-content: space-between; }
+  .card label { font-size: 13.5px; color: var(--muted); font-weight: 600; }
+  .card .val { font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .card[aria-disabled="true"] { opacity: .45; pointer-events: none; }
+  .card p { margin: 0; font-size: 12.5px; color: var(--muted); line-height: 1.55; }
+
   .presets { display: flex; gap: 8px; margin-top: 12px; }
   .presets button {
     flex: 1;
@@ -188,15 +320,22 @@
     transition: color .2s, border-color .2s, background .2s;
   }
   .presets button.active { color: var(--text); border-color: var(--rec); background: #3a2c47; }
-  .length[aria-disabled="true"] { opacity: .45; pointer-events: none; }
 
-  .hint {
-    font-size: 11.5px;
-    color: var(--muted);
-    text-align: center;
-    line-height: 1.5;
-    max-width: 320px;
+  .custom-row { display: flex; align-items: center; gap: 8px; margin-top: 11px; }
+  .custom-row input {
+    width: 74px; padding: 8px 10px;
+    font-size: 14px; font-weight: 600; font-family: inherit;
+    color: var(--text); background: var(--surface-2);
+    border: 1px solid var(--line); border-radius: 10px;
+    -webkit-appearance: none; appearance: none;
   }
+  .custom-row span { color: var(--muted); font-size: 13px; }
+  .toggle {
+    display: flex; align-items: center; gap: 9px; margin-top: 11px;
+    font-size: 12.5px; color: var(--muted); line-height: 1.4; cursor: pointer;
+  }
+  .toggle input { width: 18px; height: 18px; accent-color: var(--rec); flex-shrink: 0; }
+  .toggle em { font-style: normal; color: var(--rec); }
 
   /* --- microphone picker --- */
   .mic-select {
@@ -221,8 +360,65 @@
   }
   .mic-now b { color: var(--play); font-weight: 700; }
 
+  /* --- last-take results --- */
+  .tiles {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-bottom: 11px;
+  }
+  .tile {
+    background: var(--surface-2);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 9px 11px;
+  }
+  .tile .tl {
+    font-size: 10px; letter-spacing: .8px; text-transform: uppercase;
+    color: var(--muted); font-weight: 700;
+  }
+  .tile .tv { font-size: 17px; font-weight: 800; margin-top: 3px; font-variant-numeric: tabular-nums; }
+  .tile .tv.good { color: var(--good); }
+  .tile .tv.res { color: var(--res); }
+  .tile .ts { font-size: 10.5px; color: var(--muted); margin-top: 2px; line-height: 1.35; }
+  .tile .ts.good { color: var(--good); }
+  .take-trace {
+    width: 100%; height: auto; display: block;
+    background: #16121f; border: 1px solid var(--line); border-radius: 10px;
+  }
+  .baseline-row { display: flex; align-items: center; gap: 10px; margin-top: 11px; }
+  .baseline-row .secondary { flex-shrink: 0; }
+  .baseline-info { font-size: 11px; color: var(--muted); line-height: 1.45; }
+  .take-note {
+    margin-top: 10px; font-size: 11px; line-height: 1.5; color: var(--muted);
+  }
+
+  /* --- warm-up --- */
+  .wu-status {
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: .3px;
+    color: var(--muted);
+    text-align: center;
+    min-height: 18px;
+    line-height: 1.5;
+  }
+  .wu-status.on { color: var(--rec); }
+  .wu-live {
+    min-height: 18px;
+    font-size: 13.5px;
+    font-weight: 700;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+    text-align: center;
+  }
+  .wu-live b { color: var(--res); }
+  .wu-result { line-height: 1.6; }
+  .wu-result b { color: var(--res); }
+  .wu-result b.good { color: var(--good); }
+
   /* --- debug log --- */
-  .log { width: 100%; max-width: 340px; margin-top: 4px; }
+  .log { width: 100%; }
   .log > summary {
     list-style: none; cursor: pointer;
     font-size: 11px; letter-spacing: 1px; text-transform: uppercase;
@@ -245,116 +441,6 @@
     color: #cbbfe0; white-space: pre-wrap; word-break: break-word;
   }
 
-  /* --- live pitch meter (during recording) --- */
-  .pmeter {
-    position: absolute;
-    top: 24px; bottom: 24px; right: 4px;
-    width: 12px;
-    border-radius: 8px;
-    background: var(--surface);
-    border: 1px solid var(--line);
-    overflow: hidden;
-    opacity: 0;
-    transition: opacity .3s ease;
-  }
-  body.rec .pmeter { opacity: 1; }
-  .pmeter-band {
-    position: absolute; left: 0; right: 0;
-    background: rgba(126,242,155,.22);
-    border-top: 1px solid rgba(126,242,155,.65);
-    border-bottom: 1px solid rgba(126,242,155,.65);
-  }
-  .pmeter-dot {
-    position: absolute; left: 50%; top: 50%;
-    width: 16px; height: 16px; margin-left: -8px; margin-top: -8px;
-    border-radius: 50%;
-    background: var(--rec);
-    box-shadow: 0 0 8px rgba(0,0,0,.5);
-    opacity: .25;
-    transition: top .09s linear, background .15s ease, opacity .2s ease;
-  }
-  .pmeter-dot.inband { background: #7ef29b; }
-  .pitch-live {
-    min-height: 18px;
-    font-size: 13.5px;
-    font-weight: 700;
-    color: var(--muted);
-    font-variant-numeric: tabular-nums;
-    letter-spacing: .3px;
-  }
-  .pitch-live b { color: var(--rec); }
-  .pitch-live.inband b { color: #7ef29b; }
-
-  /* --- live resonance (brightness) meter, mirrored on the left --- */
-  .rmeter {
-    position: absolute;
-    top: 24px; bottom: 24px; left: 4px;
-    width: 12px;
-    border-radius: 8px;
-    border: 1px solid var(--line);
-    background: linear-gradient(to top, #241a33, #4a3a2a 45%, #7a6636);
-    overflow: hidden;
-    opacity: 0;
-    transition: opacity .3s ease;
-  }
-  body.rec .rmeter { opacity: 1; }
-  .rmeter-dot {
-    position: absolute; left: 50%; top: 50%;
-    width: 16px; height: 16px; margin-left: -8px; margin-top: -8px;
-    border-radius: 50%;
-    background: #ffd27a;
-    box-shadow: 0 0 8px rgba(0,0,0,.5);
-    opacity: .25;
-    transition: top .12s linear, opacity .2s ease;
-  }
-  .res-live {
-    min-height: 16px;
-    font-size: 12.5px;
-    font-weight: 700;
-    color: var(--muted);
-    font-variant-numeric: tabular-nums;
-    letter-spacing: .3px;
-  }
-  .res-live b { color: #ffd27a; }
-
-  /* --- target pitch card extras --- */
-  .custom-row { display: flex; align-items: center; gap: 8px; margin-top: 11px; }
-  .custom-row input {
-    width: 74px; padding: 8px 10px;
-    font-size: 14px; font-weight: 600; font-family: inherit;
-    color: var(--text); background: var(--surface-2);
-    border: 1px solid var(--line); border-radius: 10px;
-    -webkit-appearance: none; appearance: none;
-  }
-  .custom-row span { color: var(--muted); font-size: 13px; }
-  .toggle {
-    display: flex; align-items: center; gap: 9px; margin-top: 11px;
-    font-size: 12.5px; color: var(--muted); line-height: 1.4; cursor: pointer;
-  }
-  .toggle input { width: 18px; height: 18px; accent-color: var(--rec); flex-shrink: 0; }
-  .toggle em { font-style: normal; color: var(--rec); }
-
-  /* --- last-take analysis card --- */
-  .takecard {
-    width: 100%; max-width: 340px; margin-top: 4px;
-    background: var(--surface); border: 1px solid var(--line);
-    border-radius: 16px; padding: 14px 16px;
-  }
-  .takecard-head {
-    font-size: 11px; letter-spacing: 1px; text-transform: uppercase;
-    color: var(--muted); font-weight: 700; margin-bottom: 10px;
-  }
-  .take-stats { font-size: 12.5px; color: var(--muted); line-height: 1.7; margin-bottom: 11px; }
-  .take-stats b { color: var(--text); font-weight: 700; }
-  .take-stats b.good { color: #7ef29b; }
-  .take-trace {
-    width: 100%; height: auto; display: block;
-    background: #16121f; border: 1px solid var(--line); border-radius: 10px;
-  }
-  .take-note {
-    margin-top: 10px; font-size: 11px; line-height: 1.5; color: var(--muted);
-  }
-
   @media (prefers-reduced-motion: reduce) {
     .halo { animation: none !important; }
     * { transition-duration: .01ms !important; }
@@ -364,34 +450,79 @@
 <body>
   <header>
     <h1>Voice Loop</h1>
-    <p>Record, hear it back, repeat</p>
-    <div class="version" id="version">v8</div>
+    <p>Hands-free voice practice — pitch · resonance · weight</p>
+    <div class="version" id="version">v9</div>
   </header>
 
+  <nav class="tabs" id="tabs">
+    <button data-tab="practice" class="active">Practice</button>
+    <button data-tab="warmup">Warm-up</button>
+    <button data-tab="settings">Settings</button>
+  </nav>
+
   <main>
-    <div class="orb-wrap">
-      <div class="halo"></div>
-      <div class="rmeter" id="rmeter">
-        <div class="rmeter-dot" id="rmeterDot"></div>
-      </div>
-      <div class="orb">
-        <div>
+    <!-- ============ PRACTICE ============ -->
+    <section id="secPractice">
+      <div class="orb-wrap">
+        <div class="halo"></div>
+        <div class="meter left" id="rmeter">
+          <div class="meter-band" id="rmeterBand" hidden></div>
+          <div class="meter-dot" id="rmeterDot"></div>
+        </div>
+        <div class="orb">
           <div class="count" id="count">20</div>
         </div>
+        <div class="meter right" id="pmeter">
+          <div class="meter-band" id="pmeterBand"></div>
+          <div class="meter-dot" id="pmeterDot"></div>
+        </div>
+        <span class="meter-tag left">RES</span>
+        <span class="meter-tag right">PITCH</span>
       </div>
-      <div class="pmeter" id="pmeter">
-        <div class="pmeter-band" id="pmeterBand"></div>
-        <div class="pmeter-dot" id="pmeterDot"></div>
+      <div class="phase" id="phase">Ready</div>
+      <div class="live-lines">
+        <div class="pitch-live" id="pitchLive"></div>
+        <div class="res-live" id="resLive"></div>
       </div>
-    </div>
-    <div class="phase" id="phase">Ready</div>
-    <div class="pitch-live" id="pitchLive"></div>
-    <div class="res-live" id="resLive"></div>
 
-    <div class="controls">
       <button class="primary" id="startBtn">Start practice</button>
+      <div class="note" id="practiceNote">Tones mark each switch, so you can practice without watching the screen. Silent switch off, volume up.</div>
 
-      <div class="length" id="lengthBox">
+      <div class="card" id="takeCard" hidden>
+        <div class="card-head">Last take</div>
+        <div class="tiles" id="takeTiles"></div>
+        <canvas id="takeTrace" class="take-trace" width="320" height="90"></canvas>
+        <div class="baseline-row">
+          <button class="secondary" id="baselineBtn" type="button">Set baseline</button>
+          <div class="baseline-info" id="baselineInfo"></div>
+        </div>
+        <div class="take-note">R1 is your first vocal-tract resonance (median over the take) — the core feminization lever besides pitch. Aim roughly <b>+10–20% above your baseline</b>. Weight (H1–H2) is experimental: higher dB = lighter/breathier, low = pressed/heavy. Values shift with mic and noise, so trust trends over absolutes.</div>
+      </div>
+    </section>
+
+    <!-- ============ WARM-UP ============ -->
+    <section id="secWarmup" hidden>
+      <div class="card">
+        <div class="card-head">Guided warm-up</div>
+        <p>Two short, eyes-free exercises with spoken prompts:<br>
+        <b>1 · Pitch glides</b> — hum along as a tone slides up into your target and back, three times.<br>
+        <b>2 · Resonance check</b> — hold an “eee” for five seconds; you'll get your R1 versus your saved baseline. Best done somewhere quiet.</p>
+      </div>
+      <button class="primary" id="wuBtn">Start warm-up</button>
+      <div class="wu-status" id="wuStatus"></div>
+      <div class="wu-live" id="wuLive"></div>
+      <div class="card wu-result" id="wuResult" hidden>
+        <div class="card-head">Resonance check</div>
+        <p id="wuResultText"></p>
+        <div class="baseline-row">
+          <button class="secondary" id="wuBaseBtn" type="button" hidden>Save as new baseline</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ SETTINGS ============ -->
+    <section id="secSettings" hidden>
+      <div class="card" id="lengthBox">
         <div class="row">
           <label>Segment length</label>
           <span class="val"><span id="lenVal">20</span>s</span>
@@ -405,7 +536,7 @@
         </div>
       </div>
 
-      <div class="length" id="targetBox">
+      <div class="card" id="targetBox">
         <div class="row">
           <label>Target pitch</label>
           <span class="val"><span id="targetVal">165–250</span> Hz</span>
@@ -426,7 +557,7 @@
         <label class="toggle"><input type="checkbox" id="droneChk" /> Reference drone while recording <em>(headphones only)</em></label>
       </div>
 
-      <div class="length" id="micBox">
+      <div class="card" id="micBox">
         <div class="row">
           <label>Microphone</label>
         </div>
@@ -436,24 +567,17 @@
         <div class="mic-now" id="micNow">Pick a mic to see the real source (iOS menu labels can be reversed).</div>
       </div>
 
-      <p class="hint" id="hint">A tone marks each switch, so you can practice without watching the screen. Turn the silent switch off and volume up. Built to hold audio focus so your car won't jump back to music between takes.</p>
-    </div>
+      <div class="note" id="hint">Built to hold audio focus so your car won't jump back to music between takes. Live meters and analysis are practice guides, not clinical measurements — background noise degrades them.</div>
 
-    <div class="takecard" id="takeCard" hidden>
-      <div class="takecard-head">Last take</div>
-      <div class="take-stats" id="takeStats"></div>
-      <canvas id="takeTrace" class="take-trace" width="320" height="90"></canvas>
-      <div class="take-note">Graph shows pitch over time (green band = your target). Brightness is a rough resonance proxy — higher tends brighter/more forward (feminine-leaning). It's relative and mic-dependent, so watch how it moves rather than chasing a number.</div>
-    </div>
-
-    <details class="log" id="logBox">
-      <summary>Debug log</summary>
-      <div class="log-actions">
-        <button id="copyLog" type="button">Copy</button>
-        <button id="clearLog" type="button">Clear</button>
-      </div>
-      <pre id="logOut">(events will appear here while you use the app)</pre>
-    </details>
+      <details class="log" id="logBox">
+        <summary>Debug log</summary>
+        <div class="log-actions">
+          <button id="copyLog" type="button">Copy</button>
+          <button id="clearLog" type="button">Clear</button>
+        </div>
+        <pre id="logOut">(events will appear here while you use the app)</pre>
+      </details>
+    </section>
   </main>
 
 <script>
@@ -481,7 +605,7 @@
   var streamDeviceId = null;      // deviceId the cached stream was opened with
   try { selectedDeviceId = localStorage.getItem("vl_mic") || ""; } catch (e) {}
 
-  // --- pitch trainer state ---
+  // --- trainer state ---
   var targetLow = 165, targetHigh = 250;   // feminine-leaning default band (Hz)
   try {
     var savedT = JSON.parse(localStorage.getItem("vl_target") || "null");
@@ -494,6 +618,18 @@
   var analyser = null, micSource = null, rafId = null, pitchBuf = null, lastMeterAt = 0;
   var droneOsc = null, droneGain = null;
   var lastTakeMean = null;        // mean pitch of the most recent take (for the verdict cue)
+  var lastStats = null;           // full stats of the most recent take (for Set baseline)
+  var r1Hist = [], wHist = [];    // live smoothing (median of recent frames)
+
+  // Baseline: your own voice's medians, set from a take. Feedback is relative
+  // to this — absolute resonance numbers vary by person and mic.
+  var baseline = null;            // { pitch, r1, w }
+  try { baseline = JSON.parse(localStorage.getItem("vl_base") || "null"); } catch (e) {}
+
+  // --- warm-up state ---
+  var wuRunning = false;
+  var wuTimers = [];
+  var wuCollect = null;           // array while the eee check is sampling
 
   // --- on-screen diagnostic log (readable on a phone, with a Copy button) ---
   function log(msg) {
@@ -525,34 +661,24 @@
     var ctx = ensureAudioCtx();
     if (!ctx) { setTimeout(done, 0); return; }
     var t = ctx.currentTime;
-    function tone(freq, start, len, peak) {
-      var o = ctx.createOscillator(), g = ctx.createGain();
-      o.type = "sine";
-      o.frequency.value = freq;
-      g.gain.setValueAtTime(0.0001, t + start);
-      g.gain.linearRampToValueAtTime(peak, t + start + 0.02);
-      g.gain.exponentialRampToValueAtTime(0.0001, t + start + len);
-      o.connect(g); g.connect(ctx.destination);
-      o.start(t + start); o.stop(t + start + len + 0.03);
-    }
     var total;
     if (kind === "rec") {          // rising two-tone = "speak now"
-      tone(740, 0, 0.13, 0.3);
-      tone(988, 0.17, 0.18, 0.3);
+      schedTone(ctx, t, 740, 0, 0.13, 0.3);
+      schedTone(ctx, t, 988, 0.17, 0.18, 0.3);
       if (guideTones) {            // then hold the target pitch so you start matched
-        tone(targetCenter(), 0.40, 0.5, 0.2);
+        schedTone(ctx, t, targetCenter(), 0.40, 0.5, 0.2);
         total = 950;
       } else {
         total = 380;
       }
     } else {                       // single lower tone = "listen back"
-      tone(523, 0, 0.24, 0.28);
+      schedTone(ctx, t, 523, 0, 0.24, 0.28);
       total = 320;
     }
     setTimeout(done, total);
   }
 
-  // Schedule one sine "beep" on the shared context (used by pitch cues).
+  // Schedule one sine "beep" on the shared context.
   function schedTone(ctx, t, freq, start, len, peak) {
     var o = ctx.createOscillator(), g = ctx.createGain();
     o.type = "sine";
@@ -562,6 +688,31 @@
     g.gain.exponentialRampToValueAtTime(0.0001, t + start + len);
     o.connect(g); g.connect(ctx.destination);
     o.start(t + start); o.stop(t + start + len + 0.03);
+  }
+
+  // Schedule a sine that glides fLo → fHi → fLo (warm-up sirens).
+  function schedGlide(ctx, t, start, fLo, fHi, dur, peak) {
+    var o = ctx.createOscillator(), g = ctx.createGain();
+    o.type = "sine";
+    o.frequency.setValueAtTime(fLo, t + start);
+    o.frequency.exponentialRampToValueAtTime(fHi, t + start + dur / 2);
+    o.frequency.exponentialRampToValueAtTime(fLo, t + start + dur);
+    g.gain.setValueAtTime(0.0001, t + start);
+    g.gain.linearRampToValueAtTime(peak, t + start + 0.06);
+    g.gain.setValueAtTime(peak, t + start + dur - 0.08);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + start + dur);
+    o.connect(g); g.connect(ctx.destination);
+    o.start(t + start); o.stop(t + start + dur + 0.05);
+  }
+
+  // Spoken prompts for the eyes-free warm-up (falls back silently to tones).
+  function speak(text) {
+    try {
+      if (!("speechSynthesis" in window)) return;
+      var u = new SpeechSynthesisUtterance(text);
+      u.rate = 1;
+      window.speechSynthesis.speak(u);
+    } catch (e) { log("speak failed: " + e); }
   }
 
   // --- pitch detection (autocorrelation; Chris Wilson's proven approach) ---
@@ -609,32 +760,127 @@
     var f = Math.max(lo, Math.min(hi, freq));
     return (Math.log(f) - Math.log(lo)) / (Math.log(hi) - Math.log(lo));
   }
+  // Same idea for the resonance meter (R1 typically 250–1100 Hz).
+  function resToPct(freq) {
+    var lo = 250, hi = 1100;
+    var f = Math.max(lo, Math.min(hi, freq));
+    return (Math.log(f) - Math.log(lo)) / (Math.log(hi) - Math.log(lo));
+  }
 
-  // --- resonance proxy: "brightness" via a difference-energy centroid ---
-  // Differentiation is a +6 dB/oct high-pass, so sqrt(Σdiff² / Σx²)·fs/2π
-  // gives a centroid-like frequency that rises with high-frequency energy —
-  // a cheap, FFT-free stand-in for vocal-tract resonance / spectral tilt.
-  // Higher = brighter/more forward (tends feminine); lower = darker.
-  function brightnessHz(buf, sampleRate) {
-    var n = buf.length, sumX2 = buf[0] * buf[0], sumD2 = 0, prev = buf[0];
-    for (var i = 1; i < n; i++) {
-      var x = buf[i];
-      sumX2 += x * x;
-      var d = x - prev; sumD2 += d * d; prev = x;
+  function median(arr) {
+    if (!arr.length) return null;
+    var s = arr.slice().sort(function (a, b) { return a - b; });
+    return s[Math.floor(s.length / 2)];
+  }
+
+  // Average-of-blocks downsample (crude low-pass + decimate) to ~8 kHz for
+  // formant/weight analysis. Shared by the live meter and take analysis.
+  function downsample(data, factor) {
+    var n = Math.floor(data.length / factor);
+    var out = new Float32Array(n);
+    for (var i = 0; i < n; i++) {
+      var s = 0, b = i * factor;
+      for (var k = 0; k < factor; k++) s += data[b + k];
+      out[i] = s / factor;
     }
-    if (Math.sqrt(sumX2 / n) < 0.008) return null;   // gate silence/breath
-    if (sumX2 <= 0 || sumD2 <= 0) return null;
-    return Math.sqrt(sumD2 / sumX2) * sampleRate / (2 * Math.PI);
+    return out;
   }
-  // Normalize the raw brightness to a relative 0–100 score. The range is tuned
-  // so typical voiced speech lands mid-scale, leaving room to move either way.
-  function brightnessScore(hz) {
-    var lo = 400, hi = 2400;
-    var f = Math.max(lo, Math.min(hi, hz));
-    return Math.round(100 * (Math.log(f) - Math.log(lo)) / (Math.log(hi) - Math.log(lo)));
+
+  // --- resonance: first formant (R1) via LPC ---
+  // LPC fits an all-pole model of the vocal tract to a speech frame; the peaks
+  // of its spectral envelope are the formants. R1 is the resonance that voice
+  // feminization training raises (smaller resonant space → higher R1) — unlike
+  // spectral tilt, it is largely independent of loudness and pitch.
+  function lpcCoeffs(frame, order) {
+    var n = frame.length, i;
+    if (n < order * 4) return null;
+    // pre-emphasis (flattens glottal tilt so LPC spends its poles on formants)
+    // + Hamming window
+    var w = new Float32Array(n), prev = 0;
+    for (i = 0; i < n; i++) {
+      var x = frame[i] - 0.97 * prev; prev = frame[i];
+      w[i] = x * (0.54 - 0.46 * Math.cos(2 * Math.PI * i / (n - 1)));
+    }
+    var R = new Float32Array(order + 1);
+    for (var lag = 0; lag <= order; lag++) {
+      var s = 0;
+      for (i = 0; i < n - lag; i++) s += w[i] * w[i + lag];
+      R[lag] = s;
+    }
+    if (R[0] <= 0) return null;
+    // Levinson–Durbin recursion
+    var a = new Float32Array(order + 1); a[0] = 1;
+    var err = R[0];
+    for (var m = 1; m <= order; m++) {
+      var k = -R[m];
+      for (i = 1; i < m; i++) k -= a[i] * R[m - i];
+      k /= err;
+      for (i = 1; i <= (m >> 1); i++) {
+        var tmp = a[i] + k * a[m - i];
+        a[m - i] += k * a[i];
+        a[i] = tmp;
+      }
+      a[m] = k;
+      err *= (1 - k * k);
+      if (err <= 0) return null;
+    }
+    return a;
   }
-  function brightnessLabel(score) {
-    return score < 35 ? "darker" : (score > 65 ? "brighter" : "neutral");
+  // Evaluate the LPC envelope 1/|A(e^jw)|² on a log grid and return its peaks.
+  function lpcEnvPeaks(a, sampleRate) {
+    var lo = 150, hi = Math.min(3800, sampleRate / 2 - 100);
+    var N = 180, mags = new Float32Array(N), freqs = new Float32Array(N), g, i;
+    for (g = 0; g < N; g++) {
+      var f = lo * Math.pow(hi / lo, g / (N - 1));
+      freqs[g] = f;
+      var w = 2 * Math.PI * f / sampleRate, re = 0, im = 0;
+      for (i = 0; i < a.length; i++) { re += a[i] * Math.cos(w * i); im -= a[i] * Math.sin(w * i); }
+      mags[g] = 1 / (re * re + im * im + 1e-12);
+    }
+    var peaks = [];
+    for (g = 1; g < N - 1; g++) {
+      if (mags[g] > mags[g - 1] && mags[g] >= mags[g + 1]) peaks.push({ f: freqs[g], m: mags[g] });
+    }
+    return peaks;
+  }
+  // R1 = first envelope peak in the plausible first-formant range.
+  // Call only on voiced frames (~8 kHz sample rate). Returns Hz or null.
+  function estimateR1(frame, sampleRate) {
+    var a = lpcCoeffs(frame, 10);
+    if (!a) return null;
+    var peaks = lpcEnvPeaks(a, sampleRate);
+    for (var i = 0; i < peaks.length; i++) {
+      if (peaks[i].f >= 250 && peaks[i].f <= 1100) return peaks[i].f;
+    }
+    return null;
+  }
+
+  // --- vocal weight: H1–H2 (dB gap between the first two harmonics) ---
+  // Big gap = light/breathy phonation; small or negative = pressed/heavy
+  // (heavy weight is the masculine-leaning cue). Measured with Goertzel at
+  // f0 and 2·f0 over ~4 pitch periods, so no FFT is needed.
+  function goertzelMag(frame, sampleRate, freq) {
+    var n = frame.length;
+    var w = 2 * Math.PI * freq / sampleRate, coeff = 2 * Math.cos(w);
+    var s0 = 0, s1 = 0, s2 = 0;
+    for (var i = 0; i < n; i++) {
+      var x = frame[i] * (0.5 - 0.5 * Math.cos(2 * Math.PI * i / (n - 1)));  // Hann
+      s0 = x + coeff * s1 - s2;
+      s2 = s1; s1 = s0;
+    }
+    return Math.sqrt(Math.max(0, s1 * s1 + s2 * s2 - coeff * s1 * s2));
+  }
+  function h1h2(frame, sampleRate, f0) {
+    var need = Math.round(sampleRate / f0 * 4);
+    if (frame.length < need) return null;
+    var seg = frame.subarray(0, need);
+    var m1 = goertzelMag(seg, sampleRate, f0);
+    var m2 = goertzelMag(seg, sampleRate, 2 * f0);
+    if (m1 <= 0 || m2 <= 0) return null;
+    return 20 * Math.log10(m1 / m2);
+  }
+  function weightLabel(db) {
+    return db > 8 ? "light" : (db < 2 ? "heavy" : "medium");
   }
 
   // --- keep the screen awake during a session ---
@@ -647,7 +893,7 @@
     try { if (wakeLock) { wakeLock.release(); wakeLock = null; } } catch (e) {}
   }
   document.addEventListener("visibilitychange", function () {
-    if (running && document.visibilityState === "visible") requestWake();
+    if ((running || wuRunning) && document.visibilityState === "visible") requestWake();
   });
 
   // --- audio focus: claim it for the whole loop so the car doesn't
@@ -671,6 +917,7 @@
     count: document.getElementById("count"),
     phase: document.getElementById("phase"),
     startBtn: document.getElementById("startBtn"),
+    practiceNote: document.getElementById("practiceNote"),
     lengthBox: document.getElementById("lengthBox"),
     lenVal: document.getElementById("lenVal"),
     presets: document.getElementById("presets"),
@@ -686,21 +933,51 @@
     customHi: document.getElementById("customHi"),
     guideChk: document.getElementById("guideChk"),
     droneChk: document.getElementById("droneChk"),
-    pmeter: document.getElementById("pmeter"),
     pmeterBand: document.getElementById("pmeterBand"),
     pmeterDot: document.getElementById("pmeterDot"),
     pitchLive: document.getElementById("pitchLive"),
+    rmeterBand: document.getElementById("rmeterBand"),
     rmeterDot: document.getElementById("rmeterDot"),
     resLive: document.getElementById("resLive"),
     takeCard: document.getElementById("takeCard"),
-    takeStats: document.getElementById("takeStats"),
-    takeTrace: document.getElementById("takeTrace")
+    takeTiles: document.getElementById("takeTiles"),
+    takeTrace: document.getElementById("takeTrace"),
+    baselineBtn: document.getElementById("baselineBtn"),
+    baselineInfo: document.getElementById("baselineInfo"),
+    tabs: document.getElementById("tabs"),
+    secPractice: document.getElementById("secPractice"),
+    secWarmup: document.getElementById("secWarmup"),
+    secSettings: document.getElementById("secSettings"),
+    wuBtn: document.getElementById("wuBtn"),
+    wuStatus: document.getElementById("wuStatus"),
+    wuLive: document.getElementById("wuLive"),
+    wuResult: document.getElementById("wuResult"),
+    wuResultText: document.getElementById("wuResultText"),
+    wuBaseBtn: document.getElementById("wuBaseBtn")
   };
 
   function escapeHtml(s) {
     return String(s).replace(/[&<>"]/g, function (c) {
       return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c];
     });
+  }
+
+  // --- tabs ---
+  els.tabs.addEventListener("click", function (e) {
+    var btn = e.target.closest("button");
+    if (!btn) return;
+    var all = els.tabs.querySelectorAll("button");
+    for (var i = 0; i < all.length; i++) all[i].classList.remove("active");
+    btn.classList.add("active");
+    var t = btn.getAttribute("data-tab");
+    els.secPractice.hidden = t !== "practice";
+    els.secWarmup.hidden = t !== "warmup";
+    els.secSettings.hidden = t !== "settings";
+  });
+
+  function notePractice(msg, warn) {
+    els.practiceNote.textContent = msg;
+    els.practiceNote.classList.toggle("warn", !!warn);
   }
 
   function pickMime() {
@@ -722,7 +999,7 @@
 
   function showCount(n) { els.count.textContent = n; }
 
-  function startTimer(from, onTick) {
+  function startTimer(from) {
     clearInterval(timerId);
     var remaining = from;
     showCount(remaining);
@@ -730,7 +1007,6 @@
       remaining -= 1;
       if (remaining <= 0) { clearInterval(timerId); showCount(0); return; }
       showCount(remaining);
-      if (onTick) onTick(remaining);
     }, 1000);
   }
 
@@ -749,7 +1025,35 @@
     if (persist) { try { localStorage.setItem("vl_target", JSON.stringify({ lo: lo, hi: hi })); } catch (e) {} }
   }
 
-  // --- live pitch meter (runs while recording) ---
+  // --- baseline (your own reference voice) ---
+  // The resonance meter's green zone = baseline R1 +10…+20%, the coached
+  // amount of "brighter than your old voice".
+  function positionResBand() {
+    if (!baseline || !baseline.r1) { els.rmeterBand.hidden = true; return; }
+    var top = (1 - resToPct(baseline.r1 * 1.20)) * 100;
+    var bot = (1 - resToPct(baseline.r1 * 1.10)) * 100;
+    els.rmeterBand.hidden = false;
+    els.rmeterBand.style.top = top + "%";
+    els.rmeterBand.style.height = Math.max(1, bot - top) + "%";
+  }
+  function baselineText() {
+    if (!baseline) return "No baseline yet. Record a take in your relaxed / old voice, then tap Set baseline — feedback becomes relative to you.";
+    var s = "Baseline: " + Math.round(baseline.pitch) + " Hz";
+    if (baseline.r1) s += " · R1 " + Math.round(baseline.r1) + " Hz";
+    if (baseline.w != null) s += " · weight " + baseline.w.toFixed(1) + " dB";
+    return s;
+  }
+  function setBaselineFromLastTake() {
+    if (!lastStats) return;
+    baseline = { pitch: lastStats.median, r1: lastStats.r1Med || null, w: (lastStats.wMed != null ? lastStats.wMed : null) };
+    try { localStorage.setItem("vl_base", JSON.stringify(baseline)); } catch (e) {}
+    els.baselineInfo.textContent = baselineText();
+    positionResBand();
+    if (lastStats) renderTakeTiles(lastStats);   // refresh the deltas
+    log("baseline set: " + JSON.stringify(baseline));
+  }
+
+  // --- live meters (run while recording, and during the warm-up) ---
   function startLiveMeter() {
     var ctx = ensureAudioCtx();
     if (!ctx || !ctx.createMediaStreamSource || !stream) return;
@@ -762,20 +1066,32 @@
       pitchBuf = new Float32Array(analyser.fftSize);
     } catch (e) { log("live meter setup failed: " + e); analyser = null; return; }
     positionBand();
+    positionResBand();
+    r1Hist = []; wHist = [];
     lastMeterAt = 0;
     loopMeter();
   }
   function loopMeter() {
     rafId = requestAnimationFrame(loopMeter);
-    if (phase !== "recording" || !analyser) return;
+    if (!analyser || (phase !== "recording" && !wuRunning)) return;
     var now = (window.performance && performance.now) ? performance.now() : Date.now();
-    if (now - lastMeterAt < 55) return;   // ~18 Hz update, keeps ACF cost modest
+    if (now - lastMeterAt < 55) return;   // ~18 Hz update keeps the DSP cost modest
     lastMeterAt = now;
     analyser.getFloatTimeDomainData(pitchBuf);
     var sr = audioCtx.sampleRate;
-    updateLive(detectPitch(pitchBuf, sr), brightnessHz(pitchBuf, sr));
+    var f = detectPitch(pitchBuf, sr);
+    var r1 = null, w = null;
+    if (f) {                              // voiced only — sibilants can't spike it
+      var factor = Math.max(1, Math.round(sr / 8000));
+      var ds = downsample(pitchBuf, factor);
+      var dsSr = sr / factor;
+      r1 = estimateR1(ds, dsSr);
+      w = h1h2(ds, dsSr, f);
+    }
+    if (wuCollect && f) wuCollect.push({ f: f, r1: r1, w: w });
+    updateLive(f, r1, w);
   }
-  function updateLive(f, bHz) {
+  function updateLive(f, r1, w) {
     if (f) {
       var inband = f >= targetLow && f <= targetHigh;
       els.pitchLive.innerHTML = "<b>" + Math.round(f) + "</b> Hz · " + noteName(f);
@@ -788,14 +1104,29 @@
       els.pitchLive.classList.remove("inband");
       els.pmeterDot.style.opacity = ".25";
     }
-    if (bHz) {
-      var sc = brightnessScore(bHz);
-      els.resLive.innerHTML = "Brightness <b>" + sc + "</b> · " + brightnessLabel(sc);
-      els.rmeterDot.style.top = ((1 - sc / 100) * 100) + "%";
+    var r1s = null, ws = null;
+    if (r1) { r1Hist.push(r1); if (r1Hist.length > 5) r1Hist.shift(); }
+    if (w != null) { wHist.push(w); if (wHist.length > 5) wHist.shift(); }
+    if (f && r1Hist.length) r1s = median(r1Hist);
+    if (f && wHist.length) ws = median(wHist);
+    if (r1s) {
+      var line = "R1 <b>" + Math.round(r1s) + "</b> Hz";
+      if (baseline && baseline.r1) {
+        var d = Math.round((r1s / baseline.r1 - 1) * 100);
+        line += " · " + (d >= 0 ? "+" : "") + d + "%";
+      }
+      if (ws != null) line += " · weight " + weightLabel(ws);
+      els.resLive.innerHTML = line;
+      els.rmeterDot.style.top = ((1 - resToPct(r1s)) * 100) + "%";
       els.rmeterDot.style.opacity = "1";
     } else {
       els.resLive.innerHTML = "";
       els.rmeterDot.style.opacity = ".25";
+    }
+    if (wuRunning) {
+      els.wuLive.innerHTML = f
+        ? ("Pitch <b>" + Math.round(f) + "</b> Hz" + (r1s ? " · R1 <b>" + Math.round(r1s) + "</b> Hz" : ""))
+        : "<span style=\"opacity:.55\">— listening —</span>";
     }
   }
   function stopLiveMeter() {
@@ -805,6 +1136,7 @@
     micSource = null; analyser = null; pitchBuf = null;
     els.pitchLive.textContent = "";
     els.resLive.textContent = "";
+    els.wuLive.textContent = "";
   }
 
   // --- reference drone (headphones only) ---
@@ -848,66 +1180,96 @@
     setTimeout(done, total);
   }
 
-  // --- per-take pitch analysis (runs on the decoded AudioBuffer) ---
+  // --- per-take analysis (runs on the decoded AudioBuffer) ---
   function analyzeTake(audioBuf) {
     try {
       var sr = audioBuf.sampleRate;
       var data = audioBuf.getChannelData(0);
-      var factor = Math.max(1, Math.floor(sr / 8000));    // downsample to ~8 kHz for speed
+      var factor = Math.max(1, Math.floor(sr / 8000));    // downsample to ~8 kHz
       var dsSr = sr / factor;
-      var dsLen = Math.floor(data.length / factor);
-      var ds = new Float32Array(dsLen);
-      for (var i = 0; i < dsLen; i++) {
-        var sum = 0, base = i * factor;
-        for (var k = 0; k < factor; k++) sum += data[base + k];
-        ds[i] = sum / factor;
-      }
-      var win = 1024, hop = 256, trace = [], voiced = [], bright = [];
+      var ds = downsample(data, factor);
+      var dsLen = ds.length;
+      var win = 1024, hop = 256, trace = [], voiced = [], r1s = [], ws = [];
       for (var start = 0; start + win <= dsLen; start += hop) {
-        var f = detectPitch(ds.subarray(start, start + win), dsSr);
+        var frame = ds.subarray(start, start + win);
+        var f = detectPitch(frame, dsSr);
         trace.push({ t: start / dsSr, hz: f });
         if (f) {
           voiced.push(f);
-          // Brightness from the matching FULL-rate window (keeps highs the
-          // 8 kHz downsample would have discarded, and matches the live scale).
-          var fs = start * factor, fe = Math.min(data.length, fs + win * factor);
-          var bh = brightnessHz(data.subarray(fs, fe), sr);
-          if (bh) bright.push(brightnessScore(bh));
+          var r1 = estimateR1(frame, dsSr);
+          if (r1) r1s.push(r1);
+          var w = h1h2(frame, dsSr, f);
+          if (w != null) ws.push(w);
         }
       }
       if (!voiced.length) {
-        lastTakeMean = null;
+        lastTakeMean = null; lastStats = null;
         renderTake(null, trace, audioBuf.duration);
         log("take analysis: no voiced pitch");
         return null;
       }
-      var sorted = voiced.slice().sort(function (a, b) { return a - b; });
       var mean = voiced.reduce(function (a, b) { return a + b; }, 0) / voiced.length;
+      var sorted = voiced.slice().sort(function (a, b) { return a - b; });
       var stats = {
         mean: mean,
         median: sorted[Math.floor(sorted.length / 2)],
         min: sorted[0],
         max: sorted[sorted.length - 1],
         pctIn: Math.round(100 * voiced.filter(function (f) { return f >= targetLow && f <= targetHigh; }).length / voiced.length),
-        bright: bright.length ? Math.round(bright.reduce(function (a, b) { return a + b; }, 0) / bright.length) : null
+        r1Med: median(r1s),
+        wMed: median(ws)
       };
       lastTakeMean = mean;
+      lastStats = stats;
+      try { window.__vl.lastStats = stats; } catch (e) {}
       renderTake(stats, trace, audioBuf.duration);
-      log("take: mean " + Math.round(mean) + "Hz, range " + Math.round(stats.min) + "-" + Math.round(stats.max) + ", " + stats.pctIn + "% in band" + (stats.bright != null ? ", brightness " + stats.bright : ""));
+      log("take: mean " + Math.round(mean) + "Hz, " + stats.pctIn + "% in band" +
+          (stats.r1Med ? ", R1 " + Math.round(stats.r1Med) + "Hz" : "") +
+          (stats.wMed != null ? ", H1-H2 " + stats.wMed.toFixed(1) + "dB" : ""));
       return stats;
-    } catch (e) { log("analyzeTake error: " + e); lastTakeMean = null; return null; }
+    } catch (e) { log("analyzeTake error: " + e); lastTakeMean = null; lastStats = null; return null; }
   }
 
+  function tile(label, value, sub, cls, subCls) {
+    return "<div class=\"tile\"><div class=\"tl\">" + label + "</div>" +
+           "<div class=\"tv" + (cls ? " " + cls : "") + "\">" + value + "</div>" +
+           (sub ? "<div class=\"ts" + (subCls ? " " + subCls : "") + "\">" + sub + "</div>" : "") + "</div>";
+  }
+  function renderTakeTiles(stats) {
+    var h = "";
+    h += tile("Pitch", Math.round(stats.mean) + " Hz",
+              "range " + Math.round(stats.min) + "–" + Math.round(stats.max), "", "");
+    h += tile("In target", stats.pctIn + "%", "of voiced time", stats.pctIn >= 60 ? "good" : "", "");
+    if (stats.r1Med) {
+      var sub = "tap Set baseline below", subCls = "";
+      if (baseline && baseline.r1) {
+        var d = Math.round((stats.r1Med / baseline.r1 - 1) * 100);
+        sub = (d >= 0 ? "+" : "") + d + "% vs baseline";
+        subCls = (d >= 8 && d <= 30) ? "good" : "";
+      }
+      h += tile("Resonance R1", Math.round(stats.r1Med) + " Hz", sub, "res", subCls);
+    } else {
+      h += tile("Resonance R1", "—", "not enough voiced sound", "", "");
+    }
+    if (stats.wMed != null) {
+      var wsub = "H1–H2 " + stats.wMed.toFixed(1) + " dB";
+      if (baseline && baseline.w != null) {
+        var wd = stats.wMed - baseline.w;
+        wsub += " (" + (wd >= 0 ? "+" : "") + wd.toFixed(1) + " vs base)";
+      }
+      h += tile("Weight", weightLabel(stats.wMed), wsub, stats.wMed > 8 ? "good" : "", "");
+    } else {
+      h += tile("Weight", "—", "no estimate", "", "");
+    }
+    els.takeTiles.innerHTML = h;
+  }
   function renderTake(stats, trace, dur) {
     els.takeCard.hidden = false;
+    els.baselineInfo.textContent = baselineText();
     if (stats) {
-      els.takeStats.innerHTML =
-        "Mean <b>" + Math.round(stats.mean) + "</b> Hz &nbsp;·&nbsp; " +
-        "Range <b>" + Math.round(stats.min) + "–" + Math.round(stats.max) + "</b> Hz &nbsp;·&nbsp; " +
-        "In target <b class=\"" + (stats.pctIn >= 60 ? "good" : "") + "\">" + stats.pctIn + "%</b>" +
-        (stats.bright != null ? "<br>Brightness <b>" + stats.bright + "</b> / 100 (" + brightnessLabel(stats.bright) + ")" : "");
+      renderTakeTiles(stats);
     } else {
-      els.takeStats.innerHTML = "No clear pitch detected in that take.";
+      els.takeTiles.innerHTML = "<div class=\"tile\" style=\"grid-column:1/-1\"><div class=\"tv\">No clear pitch detected in that take.</div></div>";
     }
     drawTrace(trace, dur);
   }
@@ -1071,8 +1433,7 @@
       log("EMPTY recording (" + emptyStreak + ")");
       if (emptyStreak >= 4) {
         log("4 empty in a row — stopping. Mic may need a fresh start.");
-        els.hint.textContent = "Recording came back empty repeatedly. Tap Stop, then Start practice again.";
-        els.hint.style.color = "var(--rec)";
+        notePractice("Recording came back empty repeatedly. Tap Stop, then Start practice again.", true);
         stop();
       } else {
         beginRecording();
@@ -1080,7 +1441,7 @@
     }
   }
 
-  // Decode the take ONCE, analyze its pitch, then play it back through the
+  // Decode the take ONCE, analyze it, then play it back through the
   // AudioContext. The "listen back" cue carries the pitch verdict when guide
   // tones are on. Falls back to an <audio> element (no analysis) if decode
   // fails, and a safety-net always advances the loop so it can never stall.
@@ -1145,6 +1506,7 @@
   }
 
   async function start() {
+    if (wuRunning) return;
     // Claim the audio session BEFORE grabbing the mic — this is what keeps
     // the car's music from resuming during the record→playback handoff.
     setAudioSession("play-and-record");
@@ -1153,8 +1515,7 @@
     try {
       await ensureStream();
     } catch (e) {
-      els.hint.textContent = "Microphone access is needed. Allow it in your browser settings, then try again.";
-      els.hint.style.color = "var(--rec)";
+      notePractice("Microphone access is needed. Allow it in your browser settings, then try again.", true);
       setAudioSession("auto");
       return;
     }
@@ -1173,8 +1534,7 @@
       catch (e) { recorder = new MediaRecorder(stream); }
     } catch (e) {
       log("MediaRecorder create FAILED: " + e);
-      els.hint.textContent = "This browser could not start the recorder.";
-      els.hint.style.color = "var(--rec)";
+      notePractice("This browser could not start the recorder.", true);
       setAudioSession("auto");
       return;
     }
@@ -1186,11 +1546,12 @@
     running = true;
     els.startBtn.textContent = "Stop";
     els.startBtn.classList.add("stop");
+    els.wuBtn.disabled = true;
     els.lengthBox.setAttribute("aria-disabled", "true");
     els.micBox.setAttribute("aria-disabled", "true");
     els.micSelect.disabled = true;
     els.targetBox.setAttribute("aria-disabled", "true");
-    startLiveMeter();   // real-time pitch feedback while recording
+    startLiveMeter();   // real-time pitch + resonance feedback while recording
     log("session start · " + (mimeType || "default mime") + " · target " + targetLow + "-" + targetHigh + "Hz · " + duration + "s segments");
     beginRecording();
   }
@@ -1201,6 +1562,7 @@
     log("session stop");
     els.startBtn.textContent = "Start practice";
     els.startBtn.classList.remove("stop");
+    els.wuBtn.disabled = false;
     els.lengthBox.removeAttribute("aria-disabled");
     els.micBox.removeAttribute("aria-disabled");
     els.micSelect.disabled = false;
@@ -1226,7 +1588,148 @@
     try { if ("mediaSession" in navigator) navigator.mediaSession.playbackState = "none"; } catch (e) {}
   }
 
+  // --- guided warm-up: glides, then a sustained-"eee" resonance check ---
+  // The eee check is where live R1 is most reliable (one steady vowel, no
+  // vowel-to-vowel formant movement), so that's what the baseline compares.
+  var lastWu = null;   // medians from the most recent eee check
+  function wuAfter(ms, fn) { wuTimers.push(setTimeout(fn, ms)); }
+  function wuStatus(msg, on) {
+    els.wuStatus.textContent = msg;
+    els.wuStatus.classList.toggle("on", !!on);
+  }
+
+  async function startWarmup() {
+    if (running || wuRunning) return;
+    setAudioSession("play-and-record");
+    var ctx = ensureAudioCtx();
+    if (!ctx) { wuStatus("This browser can't play audio.", true); setAudioSession("auto"); return; }
+    claimNowPlaying();
+    try {
+      await ensureStream();
+    } catch (e) {
+      wuStatus("Microphone access is needed for the warm-up.", true);
+      setAudioSession("auto");
+      return;
+    }
+    requestWake();
+    wuRunning = true;
+    els.wuBtn.textContent = "Stop warm-up";
+    els.wuBtn.classList.add("stop");
+    els.startBtn.disabled = true;
+    els.wuResult.hidden = true;
+    startLiveMeter();
+    log("warm-up start");
+
+    // -- exercise 1: three pitch glides --
+    wuStatus("1 / 2 · Hum along with the glide — up into your target and back.", true);
+    speak("Warm up. Hum along with the tone as it glides up and back down. Three times.");
+    var fLo = Math.max(80, Math.round(targetLow * 0.7));
+    var fHi = Math.round(targetCenter());
+    var glideDur = 4.0, gap = 0.7, lead = 3.2;
+    var t = ctx.currentTime;
+    for (var i = 0; i < 3; i++) {
+      schedGlide(ctx, t, lead + i * (glideDur + gap), fLo, fHi, glideDur, 0.18);
+    }
+    var ex1Ms = Math.round((lead + 3 * (glideDur + gap)) * 1000);
+
+    // -- exercise 2: sustained eee --
+    wuAfter(ex1Ms, function () {
+      if (!wuRunning) return;
+      wuStatus("2 / 2 · Next: hold one steady “eee”.", true);
+      speak("Now hold a comfortable eee sound until the chime.");
+      wuAfter(3200, function () {
+        if (!wuRunning) return;
+        schedTone(audioCtx, audioCtx.currentTime, 740, 0, 0.12, 0.3);   // go
+        wuStatus("Hold the eee…", true);
+        wuCollect = [];
+        wuAfter(5000, function () {
+          if (!wuRunning) return;
+          var samples = wuCollect || []; wuCollect = null;
+          schedTone(audioCtx, audioCtx.currentTime, 880, 0, 0.14, 0.3); // done chime
+          finishEee(samples);
+        });
+      });
+    });
+  }
+
+  function finishEee(samples) {
+    var r1s = [], ws = [], fs = [];
+    for (var i = 0; i < samples.length; i++) {
+      if (samples[i].r1) r1s.push(samples[i].r1);
+      if (samples[i].w != null) ws.push(samples[i].w);
+      fs.push(samples[i].f);
+    }
+    log("eee check: " + samples.length + " voiced frames, " + r1s.length + " with R1");
+    els.wuResult.hidden = false;
+    els.wuBaseBtn.hidden = true;
+    if (r1s.length < 5) {
+      els.wuResultText.innerHTML = "Couldn't hear a steady “eee” — try again somewhere quieter, a little louder.";
+      speak("I couldn't hear that clearly. Try again.");
+      endWarmup("Warm-up done — resonance check didn't get a reading.");
+      return;
+    }
+    var r1Med = median(r1s), wMed = median(ws), fMed = median(fs);
+    lastWu = { r1: r1Med, w: wMed };
+    var base = null;
+    try { base = JSON.parse(localStorage.getItem("vl_base_eee") || "null"); } catch (e) {}
+    var html = "Pitch <b>" + Math.round(fMed) + "</b> Hz · R1 <b>" + Math.round(r1Med) + "</b> Hz" +
+               (wMed != null ? " · weight <b>" + weightLabel(wMed) + "</b>" : "") + "<br>";
+    if (!base || !base.r1) {
+      try { localStorage.setItem("vl_base_eee", JSON.stringify(lastWu)); } catch (e) {}
+      html += "Saved as your <b class=\"good\">eee baseline</b> — future checks compare to this.";
+      speak("Baseline saved.");
+    } else {
+      var d = Math.round((r1Med / base.r1 - 1) * 100);
+      if (d >= 8) {
+        html += "R1 is <b class=\"good\">" + d + "% above</b> your baseline — brighter, more forward. Nice.";
+        speak("Resonance is " + d + " percent above baseline. Nice and bright.");
+        var c = ensureAudioCtx(); if (c) { schedTone(c, c.currentTime, 660, 0.1, 0.12, 0.25); schedTone(c, c.currentTime, 880, 0.24, 0.16, 0.25); }
+      } else if (d <= -5) {
+        html += "R1 is <b>" + Math.abs(d) + "% below</b> your baseline — darker than usual.";
+        speak("Resonance is below baseline. Think smaller, brighter space.");
+      } else {
+        html += "R1 is <b>near your baseline</b> (" + (d >= 0 ? "+" : "") + d + "%). To brighten: smile slightly, tongue forward.";
+        speak("Resonance is near baseline.");
+      }
+      els.wuBaseBtn.hidden = false;   // allow re-anchoring the eee baseline
+    }
+    els.wuResultText.innerHTML = html;
+    endWarmup("Warm-up done — ready to practice.");
+  }
+
+  function endWarmup(msg) {
+    for (var i = 0; i < wuTimers.length; i++) clearTimeout(wuTimers[i]);
+    wuTimers = [];
+    wuCollect = null;
+    wuRunning = false;
+    try { if ("speechSynthesis" in window) window.speechSynthesis.cancel(); } catch (e) {}
+    els.wuBtn.textContent = "Start warm-up";
+    els.wuBtn.classList.remove("stop");
+    els.startBtn.disabled = false;
+    wuStatus(msg || "", false);
+    if (!running) {
+      stopLiveMeter();
+      releaseWake();
+      setAudioSession("auto");
+      try { if ("mediaSession" in navigator) navigator.mediaSession.playbackState = "none"; } catch (e) {}
+    }
+    log("warm-up end");
+  }
+
+  els.wuBtn.onclick = function () {
+    if (wuRunning) endWarmup("Warm-up stopped.");
+    else startWarmup();
+  };
+  els.wuBaseBtn.onclick = function () {
+    if (!lastWu) return;
+    try { localStorage.setItem("vl_base_eee", JSON.stringify(lastWu)); } catch (e) {}
+    els.wuBaseBtn.hidden = true;
+    els.wuResultText.innerHTML += "<br>Saved as your new eee baseline.";
+    log("eee baseline reset: " + JSON.stringify(lastWu));
+  };
+
   els.startBtn.onclick = function () { running ? stop() : start(); };
+  els.baselineBtn.onclick = setBaselineFromLastTake;
 
   els.presets.addEventListener("click", function (e) {
     var btn = e.target.closest("button");
@@ -1291,6 +1794,8 @@
   (function initTargetUI() {
     els.targetVal.textContent = targetLow + "–" + targetHigh;
     positionBand();
+    positionResBand();
+    els.baselineInfo.textContent = baselineText();
     var all = els.targetPresets.querySelectorAll("button"), matched = false, i, b;
     for (i = 0; i < all.length; i++) {
       b = all[i]; b.classList.remove("active");
@@ -1323,12 +1828,14 @@
     document.getElementById("logOut").textContent = "(cleared)";
   };
 
+  // Analysis internals, exposed for automated testing only.
+  window.__vl = { lastStats: null, detectPitch: detectPitch, estimateR1: estimateR1, h1h2: h1h2, downsample: downsample };
+
   // graceful message if the browser can't record
   if (!navigator.mediaDevices || typeof MediaRecorder === "undefined") {
     els.startBtn.disabled = true;
-    els.startBtn.style.opacity = "0.5";
-    els.hint.textContent = "This browser can't record audio. Open the page in Safari or Chrome.";
-    els.hint.style.color = "var(--rec)";
+    els.wuBtn.disabled = true;
+    notePractice("This browser can't record audio. Open the page in Safari or Chrome.", true);
   }
 })();
 </script>
