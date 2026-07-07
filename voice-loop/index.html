@@ -70,7 +70,7 @@
     font-weight: 800;
     letter-spacing: 0.8px;
     color: #1a1526;
-    background: #66d9ff;   /* v7 */
+    background: #ffd24d;   /* v8 */
   }
 
   main {
@@ -285,6 +285,38 @@
   .pitch-live b { color: var(--rec); }
   .pitch-live.inband b { color: #7ef29b; }
 
+  /* --- live resonance (brightness) meter, mirrored on the left --- */
+  .rmeter {
+    position: absolute;
+    top: 24px; bottom: 24px; left: 4px;
+    width: 12px;
+    border-radius: 8px;
+    border: 1px solid var(--line);
+    background: linear-gradient(to top, #241a33, #4a3a2a 45%, #7a6636);
+    overflow: hidden;
+    opacity: 0;
+    transition: opacity .3s ease;
+  }
+  body.rec .rmeter { opacity: 1; }
+  .rmeter-dot {
+    position: absolute; left: 50%; top: 50%;
+    width: 16px; height: 16px; margin-left: -8px; margin-top: -8px;
+    border-radius: 50%;
+    background: #ffd27a;
+    box-shadow: 0 0 8px rgba(0,0,0,.5);
+    opacity: .25;
+    transition: top .12s linear, opacity .2s ease;
+  }
+  .res-live {
+    min-height: 16px;
+    font-size: 12.5px;
+    font-weight: 700;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: .3px;
+  }
+  .res-live b { color: #ffd27a; }
+
   /* --- target pitch card extras --- */
   .custom-row { display: flex; align-items: center; gap: 8px; margin-top: 11px; }
   .custom-row input {
@@ -319,6 +351,9 @@
     width: 100%; height: auto; display: block;
     background: #16121f; border: 1px solid var(--line); border-radius: 10px;
   }
+  .take-note {
+    margin-top: 10px; font-size: 11px; line-height: 1.5; color: var(--muted);
+  }
 
   @media (prefers-reduced-motion: reduce) {
     .halo { animation: none !important; }
@@ -330,12 +365,15 @@
   <header>
     <h1>Voice Loop</h1>
     <p>Record, hear it back, repeat</p>
-    <div class="version" id="version">v7</div>
+    <div class="version" id="version">v8</div>
   </header>
 
   <main>
     <div class="orb-wrap">
       <div class="halo"></div>
+      <div class="rmeter" id="rmeter">
+        <div class="rmeter-dot" id="rmeterDot"></div>
+      </div>
       <div class="orb">
         <div>
           <div class="count" id="count">20</div>
@@ -348,6 +386,7 @@
     </div>
     <div class="phase" id="phase">Ready</div>
     <div class="pitch-live" id="pitchLive"></div>
+    <div class="res-live" id="resLive"></div>
 
     <div class="controls">
       <button class="primary" id="startBtn">Start practice</button>
@@ -404,6 +443,7 @@
       <div class="takecard-head">Last take</div>
       <div class="take-stats" id="takeStats"></div>
       <canvas id="takeTrace" class="take-trace" width="320" height="90"></canvas>
+      <div class="take-note">Graph shows pitch over time (green band = your target). Brightness is a rough resonance proxy — higher tends brighter/more forward (feminine-leaning). It's relative and mic-dependent, so watch how it moves rather than chasing a number.</div>
     </div>
 
     <details class="log" id="logBox">
@@ -570,6 +610,33 @@
     return (Math.log(f) - Math.log(lo)) / (Math.log(hi) - Math.log(lo));
   }
 
+  // --- resonance proxy: "brightness" via a difference-energy centroid ---
+  // Differentiation is a +6 dB/oct high-pass, so sqrt(Σdiff² / Σx²)·fs/2π
+  // gives a centroid-like frequency that rises with high-frequency energy —
+  // a cheap, FFT-free stand-in for vocal-tract resonance / spectral tilt.
+  // Higher = brighter/more forward (tends feminine); lower = darker.
+  function brightnessHz(buf, sampleRate) {
+    var n = buf.length, sumX2 = buf[0] * buf[0], sumD2 = 0, prev = buf[0];
+    for (var i = 1; i < n; i++) {
+      var x = buf[i];
+      sumX2 += x * x;
+      var d = x - prev; sumD2 += d * d; prev = x;
+    }
+    if (Math.sqrt(sumX2 / n) < 0.008) return null;   // gate silence/breath
+    if (sumX2 <= 0 || sumD2 <= 0) return null;
+    return Math.sqrt(sumD2 / sumX2) * sampleRate / (2 * Math.PI);
+  }
+  // Normalize the raw brightness to a relative 0–100 score. The range is tuned
+  // so typical voiced speech lands mid-scale, leaving room to move either way.
+  function brightnessScore(hz) {
+    var lo = 400, hi = 2400;
+    var f = Math.max(lo, Math.min(hi, hz));
+    return Math.round(100 * (Math.log(f) - Math.log(lo)) / (Math.log(hi) - Math.log(lo)));
+  }
+  function brightnessLabel(score) {
+    return score < 35 ? "darker" : (score > 65 ? "brighter" : "neutral");
+  }
+
   // --- keep the screen awake during a session ---
   async function requestWake() {
     try {
@@ -623,6 +690,8 @@
     pmeterBand: document.getElementById("pmeterBand"),
     pmeterDot: document.getElementById("pmeterDot"),
     pitchLive: document.getElementById("pitchLive"),
+    rmeterDot: document.getElementById("rmeterDot"),
+    resLive: document.getElementById("resLive"),
     takeCard: document.getElementById("takeCard"),
     takeStats: document.getElementById("takeStats"),
     takeTrace: document.getElementById("takeTrace")
@@ -703,9 +772,10 @@
     if (now - lastMeterAt < 55) return;   // ~18 Hz update, keeps ACF cost modest
     lastMeterAt = now;
     analyser.getFloatTimeDomainData(pitchBuf);
-    updateLive(detectPitch(pitchBuf, audioCtx.sampleRate));
+    var sr = audioCtx.sampleRate;
+    updateLive(detectPitch(pitchBuf, sr), brightnessHz(pitchBuf, sr));
   }
-  function updateLive(f) {
+  function updateLive(f, bHz) {
     if (f) {
       var inband = f >= targetLow && f <= targetHigh;
       els.pitchLive.innerHTML = "<b>" + Math.round(f) + "</b> Hz · " + noteName(f);
@@ -718,6 +788,15 @@
       els.pitchLive.classList.remove("inband");
       els.pmeterDot.style.opacity = ".25";
     }
+    if (bHz) {
+      var sc = brightnessScore(bHz);
+      els.resLive.innerHTML = "Brightness <b>" + sc + "</b> · " + brightnessLabel(sc);
+      els.rmeterDot.style.top = ((1 - sc / 100) * 100) + "%";
+      els.rmeterDot.style.opacity = "1";
+    } else {
+      els.resLive.innerHTML = "";
+      els.rmeterDot.style.opacity = ".25";
+    }
   }
   function stopLiveMeter() {
     if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
@@ -725,6 +804,7 @@
     try { if (analyser) analyser.disconnect(); } catch (e) {}
     micSource = null; analyser = null; pitchBuf = null;
     els.pitchLive.textContent = "";
+    els.resLive.textContent = "";
   }
 
   // --- reference drone (headphones only) ---
@@ -782,11 +862,18 @@
         for (var k = 0; k < factor; k++) sum += data[base + k];
         ds[i] = sum / factor;
       }
-      var win = 1024, hop = 256, trace = [], voiced = [];
+      var win = 1024, hop = 256, trace = [], voiced = [], bright = [];
       for (var start = 0; start + win <= dsLen; start += hop) {
         var f = detectPitch(ds.subarray(start, start + win), dsSr);
         trace.push({ t: start / dsSr, hz: f });
-        if (f) voiced.push(f);
+        if (f) {
+          voiced.push(f);
+          // Brightness from the matching FULL-rate window (keeps highs the
+          // 8 kHz downsample would have discarded, and matches the live scale).
+          var fs = start * factor, fe = Math.min(data.length, fs + win * factor);
+          var bh = brightnessHz(data.subarray(fs, fe), sr);
+          if (bh) bright.push(brightnessScore(bh));
+        }
       }
       if (!voiced.length) {
         lastTakeMean = null;
@@ -801,11 +888,12 @@
         median: sorted[Math.floor(sorted.length / 2)],
         min: sorted[0],
         max: sorted[sorted.length - 1],
-        pctIn: Math.round(100 * voiced.filter(function (f) { return f >= targetLow && f <= targetHigh; }).length / voiced.length)
+        pctIn: Math.round(100 * voiced.filter(function (f) { return f >= targetLow && f <= targetHigh; }).length / voiced.length),
+        bright: bright.length ? Math.round(bright.reduce(function (a, b) { return a + b; }, 0) / bright.length) : null
       };
       lastTakeMean = mean;
       renderTake(stats, trace, audioBuf.duration);
-      log("take: mean " + Math.round(mean) + "Hz, range " + Math.round(stats.min) + "-" + Math.round(stats.max) + ", " + stats.pctIn + "% in band");
+      log("take: mean " + Math.round(mean) + "Hz, range " + Math.round(stats.min) + "-" + Math.round(stats.max) + ", " + stats.pctIn + "% in band" + (stats.bright != null ? ", brightness " + stats.bright : ""));
       return stats;
     } catch (e) { log("analyzeTake error: " + e); lastTakeMean = null; return null; }
   }
@@ -816,7 +904,8 @@
       els.takeStats.innerHTML =
         "Mean <b>" + Math.round(stats.mean) + "</b> Hz &nbsp;·&nbsp; " +
         "Range <b>" + Math.round(stats.min) + "–" + Math.round(stats.max) + "</b> Hz &nbsp;·&nbsp; " +
-        "In target <b class=\"" + (stats.pctIn >= 60 ? "good" : "") + "\">" + stats.pctIn + "%</b>";
+        "In target <b class=\"" + (stats.pctIn >= 60 ? "good" : "") + "\">" + stats.pctIn + "%</b>" +
+        (stats.bright != null ? "<br>Brightness <b>" + stats.bright + "</b> / 100 (" + brightnessLabel(stats.bright) + ")" : "");
     } else {
       els.takeStats.innerHTML = "No clear pitch detected in that take.";
     }
