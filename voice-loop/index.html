@@ -70,7 +70,7 @@
     font-weight: 800;
     letter-spacing: 0.8px;
     color: #1a1526;
-    background: #ffb066;   /* v6 */
+    background: #66d9ff;   /* v7 */
   }
 
   main {
@@ -245,6 +245,81 @@
     color: #cbbfe0; white-space: pre-wrap; word-break: break-word;
   }
 
+  /* --- live pitch meter (during recording) --- */
+  .pmeter {
+    position: absolute;
+    top: 24px; bottom: 24px; right: 4px;
+    width: 12px;
+    border-radius: 8px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    overflow: hidden;
+    opacity: 0;
+    transition: opacity .3s ease;
+  }
+  body.rec .pmeter { opacity: 1; }
+  .pmeter-band {
+    position: absolute; left: 0; right: 0;
+    background: rgba(126,242,155,.22);
+    border-top: 1px solid rgba(126,242,155,.65);
+    border-bottom: 1px solid rgba(126,242,155,.65);
+  }
+  .pmeter-dot {
+    position: absolute; left: 50%; top: 50%;
+    width: 16px; height: 16px; margin-left: -8px; margin-top: -8px;
+    border-radius: 50%;
+    background: var(--rec);
+    box-shadow: 0 0 8px rgba(0,0,0,.5);
+    opacity: .25;
+    transition: top .09s linear, background .15s ease, opacity .2s ease;
+  }
+  .pmeter-dot.inband { background: #7ef29b; }
+  .pitch-live {
+    min-height: 18px;
+    font-size: 13.5px;
+    font-weight: 700;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: .3px;
+  }
+  .pitch-live b { color: var(--rec); }
+  .pitch-live.inband b { color: #7ef29b; }
+
+  /* --- target pitch card extras --- */
+  .custom-row { display: flex; align-items: center; gap: 8px; margin-top: 11px; }
+  .custom-row input {
+    width: 74px; padding: 8px 10px;
+    font-size: 14px; font-weight: 600; font-family: inherit;
+    color: var(--text); background: var(--surface-2);
+    border: 1px solid var(--line); border-radius: 10px;
+    -webkit-appearance: none; appearance: none;
+  }
+  .custom-row span { color: var(--muted); font-size: 13px; }
+  .toggle {
+    display: flex; align-items: center; gap: 9px; margin-top: 11px;
+    font-size: 12.5px; color: var(--muted); line-height: 1.4; cursor: pointer;
+  }
+  .toggle input { width: 18px; height: 18px; accent-color: var(--rec); flex-shrink: 0; }
+  .toggle em { font-style: normal; color: var(--rec); }
+
+  /* --- last-take analysis card --- */
+  .takecard {
+    width: 100%; max-width: 340px; margin-top: 4px;
+    background: var(--surface); border: 1px solid var(--line);
+    border-radius: 16px; padding: 14px 16px;
+  }
+  .takecard-head {
+    font-size: 11px; letter-spacing: 1px; text-transform: uppercase;
+    color: var(--muted); font-weight: 700; margin-bottom: 10px;
+  }
+  .take-stats { font-size: 12.5px; color: var(--muted); line-height: 1.7; margin-bottom: 11px; }
+  .take-stats b { color: var(--text); font-weight: 700; }
+  .take-stats b.good { color: #7ef29b; }
+  .take-trace {
+    width: 100%; height: auto; display: block;
+    background: #16121f; border: 1px solid var(--line); border-radius: 10px;
+  }
+
   @media (prefers-reduced-motion: reduce) {
     .halo { animation: none !important; }
     * { transition-duration: .01ms !important; }
@@ -255,7 +330,7 @@
   <header>
     <h1>Voice Loop</h1>
     <p>Record, hear it back, repeat</p>
-    <div class="version" id="version">v6</div>
+    <div class="version" id="version">v7</div>
   </header>
 
   <main>
@@ -266,8 +341,13 @@
           <div class="count" id="count">20</div>
         </div>
       </div>
+      <div class="pmeter" id="pmeter">
+        <div class="pmeter-band" id="pmeterBand"></div>
+        <div class="pmeter-dot" id="pmeterDot"></div>
+      </div>
     </div>
     <div class="phase" id="phase">Ready</div>
+    <div class="pitch-live" id="pitchLive"></div>
 
     <div class="controls">
       <button class="primary" id="startBtn">Start practice</button>
@@ -286,6 +366,27 @@
         </div>
       </div>
 
+      <div class="length" id="targetBox">
+        <div class="row">
+          <label>Target pitch</label>
+          <span class="val"><span id="targetVal">165–250</span> Hz</span>
+        </div>
+        <div class="presets" id="targetPresets">
+          <button data-lo="165" data-hi="250" class="active">Fem</button>
+          <button data-lo="145" data-hi="185">Andro</button>
+          <button data-lo="100" data-hi="150">Masc</button>
+          <button data-custom="1">Custom</button>
+        </div>
+        <div class="custom-row" id="customRow" hidden>
+          <input type="number" id="customLo" min="70" max="400" inputmode="numeric" aria-label="Low Hz" />
+          <span>–</span>
+          <input type="number" id="customHi" min="70" max="400" inputmode="numeric" aria-label="High Hz" />
+          <span>Hz</span>
+        </div>
+        <label class="toggle"><input type="checkbox" id="guideChk" checked /> Pitch guide tones — target beep before, result chime after</label>
+        <label class="toggle"><input type="checkbox" id="droneChk" /> Reference drone while recording <em>(headphones only)</em></label>
+      </div>
+
       <div class="length" id="micBox">
         <div class="row">
           <label>Microphone</label>
@@ -297,6 +398,12 @@
       </div>
 
       <p class="hint" id="hint">A tone marks each switch, so you can practice without watching the screen. Turn the silent switch off and volume up. Built to hold audio focus so your car won't jump back to music between takes.</p>
+    </div>
+
+    <div class="takecard" id="takeCard" hidden>
+      <div class="takecard-head">Last take</div>
+      <div class="take-stats" id="takeStats"></div>
+      <canvas id="takeTrace" class="take-trace" width="320" height="90"></canvas>
     </div>
 
     <details class="log" id="logBox">
@@ -333,6 +440,20 @@
   var selectedDeviceId = "";      // chosen mic ("" = let the phone decide)
   var streamDeviceId = null;      // deviceId the cached stream was opened with
   try { selectedDeviceId = localStorage.getItem("vl_mic") || ""; } catch (e) {}
+
+  // --- pitch trainer state ---
+  var targetLow = 165, targetHigh = 250;   // feminine-leaning default band (Hz)
+  try {
+    var savedT = JSON.parse(localStorage.getItem("vl_target") || "null");
+    if (savedT && savedT.lo && savedT.hi) { targetLow = savedT.lo; targetHigh = savedT.hi; }
+  } catch (e) {}
+  var guideTones = true;          // target beep + result chime
+  var droneOn = false;            // continuous reference drone (headphones only)
+  try { guideTones = localStorage.getItem("vl_guide") !== "0"; } catch (e) {}
+  try { droneOn = localStorage.getItem("vl_drone") === "1"; } catch (e) {}
+  var analyser = null, micSource = null, rafId = null, pitchBuf = null, lastMeterAt = 0;
+  var droneOsc = null, droneGain = null;
+  var lastTakeMean = null;        // mean pitch of the most recent take (for the verdict cue)
 
   // --- on-screen diagnostic log (readable on a phone, with a Copy button) ---
   function log(msg) {
@@ -378,12 +499,75 @@
     if (kind === "rec") {          // rising two-tone = "speak now"
       tone(740, 0, 0.13, 0.3);
       tone(988, 0.17, 0.18, 0.3);
-      total = 380;
+      if (guideTones) {            // then hold the target pitch so you start matched
+        tone(targetCenter(), 0.40, 0.5, 0.2);
+        total = 950;
+      } else {
+        total = 380;
+      }
     } else {                       // single lower tone = "listen back"
       tone(523, 0, 0.24, 0.28);
       total = 320;
     }
     setTimeout(done, total);
+  }
+
+  // Schedule one sine "beep" on the shared context (used by pitch cues).
+  function schedTone(ctx, t, freq, start, len, peak) {
+    var o = ctx.createOscillator(), g = ctx.createGain();
+    o.type = "sine";
+    o.frequency.value = freq;
+    g.gain.setValueAtTime(0.0001, t + start);
+    g.gain.linearRampToValueAtTime(peak, t + start + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + start + len);
+    o.connect(g); g.connect(ctx.destination);
+    o.start(t + start); o.stop(t + start + len + 0.03);
+  }
+
+  // --- pitch detection (autocorrelation; Chris Wilson's proven approach) ---
+  // Returns fundamental frequency in Hz, or null when unvoiced/too quiet.
+  function detectPitch(buf, sampleRate) {
+    var SIZE = buf.length, i, j;
+    var rms = 0;
+    for (i = 0; i < SIZE; i++) { var v = buf[i]; rms += v * v; }
+    rms = Math.sqrt(rms / SIZE);
+    if (rms < 0.008) return null;              // gate silence / breath noise
+
+    var r1 = 0, r2 = SIZE - 1, thres = 0.2;
+    for (i = 0; i < SIZE / 2; i++) { if (Math.abs(buf[i]) < thres) { r1 = i; break; } }
+    for (i = 1; i < SIZE / 2; i++) { if (Math.abs(buf[SIZE - i]) < thres) { r2 = SIZE - i; break; } }
+    var b = buf.subarray(r1, r2);
+    var n = b.length;
+    if (n < 128) return null;
+
+    var c = new Float32Array(n);
+    for (i = 0; i < n; i++) { var sum = 0; for (j = 0; j < n - i; j++) sum += b[j] * b[j + i]; c[i] = sum; }
+
+    var d = 0; while (d < n - 1 && c[d] > c[d + 1]) d++;
+    var maxval = -1, maxpos = -1;
+    for (i = d; i < n; i++) { if (c[i] > maxval) { maxval = c[i]; maxpos = i; } }
+    var T0 = maxpos;
+    if (T0 <= 0) return null;
+
+    var x1 = c[T0 - 1] || 0, x2 = c[T0], x3 = c[T0 + 1] || 0;
+    var a = (x1 + x3 - 2 * x2) / 2, bb = (x3 - x1) / 2;
+    if (a) T0 = T0 - bb / (2 * a);
+
+    var freq = sampleRate / T0;
+    if (freq < 60 || freq > 500) return null;  // outside plausible speaking range
+    return freq;
+  }
+
+  var NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+  function noteName(freq) {
+    var n = Math.round(12 * Math.log2(freq / 440) + 69);
+    return NOTE_NAMES[((n % 12) + 12) % 12] + (Math.floor(n / 12) - 1);
+  }
+  // Map a frequency to 0..1 on a log scale (80–350 Hz), for meter/graph placement.
+  function pitchToPct(freq) {
+    var lo = 80, hi = 350;
+    var f = Math.max(lo, Math.min(hi, freq));
+    return (Math.log(f) - Math.log(lo)) / (Math.log(hi) - Math.log(lo));
   }
 
   // --- keep the screen awake during a session ---
@@ -426,7 +610,22 @@
     hint: document.getElementById("hint"),
     micBox: document.getElementById("micBox"),
     micSelect: document.getElementById("micSelect"),
-    micNow: document.getElementById("micNow")
+    micNow: document.getElementById("micNow"),
+    targetBox: document.getElementById("targetBox"),
+    targetVal: document.getElementById("targetVal"),
+    targetPresets: document.getElementById("targetPresets"),
+    customRow: document.getElementById("customRow"),
+    customLo: document.getElementById("customLo"),
+    customHi: document.getElementById("customHi"),
+    guideChk: document.getElementById("guideChk"),
+    droneChk: document.getElementById("droneChk"),
+    pmeter: document.getElementById("pmeter"),
+    pmeterBand: document.getElementById("pmeterBand"),
+    pmeterDot: document.getElementById("pmeterDot"),
+    pitchLive: document.getElementById("pitchLive"),
+    takeCard: document.getElementById("takeCard"),
+    takeStats: document.getElementById("takeStats"),
+    takeTrace: document.getElementById("takeTrace")
   };
 
   function escapeHtml(s) {
@@ -464,6 +663,189 @@
       showCount(remaining);
       if (onTick) onTick(remaining);
     }, 1000);
+  }
+
+  // --- target pitch band ---
+  function targetCenter() { return Math.sqrt(targetLow * targetHigh); }
+  function positionBand() {
+    var top = (1 - pitchToPct(targetHigh)) * 100;
+    var bot = (1 - pitchToPct(targetLow)) * 100;
+    els.pmeterBand.style.top = top + "%";
+    els.pmeterBand.style.height = Math.max(0, bot - top) + "%";
+  }
+  function applyTarget(lo, hi, persist) {
+    targetLow = lo; targetHigh = hi;
+    els.targetVal.textContent = lo + "–" + hi;
+    positionBand();
+    if (persist) { try { localStorage.setItem("vl_target", JSON.stringify({ lo: lo, hi: hi })); } catch (e) {} }
+  }
+
+  // --- live pitch meter (runs while recording) ---
+  function startLiveMeter() {
+    var ctx = ensureAudioCtx();
+    if (!ctx || !ctx.createMediaStreamSource || !stream) return;
+    stopLiveMeter();
+    try {
+      micSource = ctx.createMediaStreamSource(stream);
+      analyser = ctx.createAnalyser();
+      analyser.fftSize = 2048;
+      micSource.connect(analyser);        // analysis only — NOT to destination (no echo)
+      pitchBuf = new Float32Array(analyser.fftSize);
+    } catch (e) { log("live meter setup failed: " + e); analyser = null; return; }
+    positionBand();
+    lastMeterAt = 0;
+    loopMeter();
+  }
+  function loopMeter() {
+    rafId = requestAnimationFrame(loopMeter);
+    if (phase !== "recording" || !analyser) return;
+    var now = (window.performance && performance.now) ? performance.now() : Date.now();
+    if (now - lastMeterAt < 55) return;   // ~18 Hz update, keeps ACF cost modest
+    lastMeterAt = now;
+    analyser.getFloatTimeDomainData(pitchBuf);
+    updateLive(detectPitch(pitchBuf, audioCtx.sampleRate));
+  }
+  function updateLive(f) {
+    if (f) {
+      var inband = f >= targetLow && f <= targetHigh;
+      els.pitchLive.innerHTML = "<b>" + Math.round(f) + "</b> Hz · " + noteName(f);
+      els.pitchLive.classList.toggle("inband", inband);
+      els.pmeterDot.style.top = ((1 - pitchToPct(f)) * 100) + "%";
+      els.pmeterDot.style.opacity = "1";
+      els.pmeterDot.classList.toggle("inband", inband);
+    } else {
+      els.pitchLive.innerHTML = "<span style=\"opacity:.55\">— listening —</span>";
+      els.pitchLive.classList.remove("inband");
+      els.pmeterDot.style.opacity = ".25";
+    }
+  }
+  function stopLiveMeter() {
+    if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
+    try { if (micSource) micSource.disconnect(); } catch (e) {}
+    try { if (analyser) analyser.disconnect(); } catch (e) {}
+    micSource = null; analyser = null; pitchBuf = null;
+    els.pitchLive.textContent = "";
+  }
+
+  // --- reference drone (headphones only) ---
+  function startDrone() {
+    if (!droneOn) return;
+    var ctx = ensureAudioCtx();
+    if (!ctx) return;
+    stopDrone();
+    try {
+      droneOsc = ctx.createOscillator();
+      droneGain = ctx.createGain();
+      droneOsc.type = "sine";
+      droneOsc.frequency.value = targetCenter();
+      droneGain.gain.value = 0.05;        // quiet reference
+      droneOsc.connect(droneGain); droneGain.connect(ctx.destination);
+      droneOsc.start();
+    } catch (e) { log("drone failed: " + e); }
+  }
+  function stopDrone() {
+    try { if (droneOsc) { droneOsc.stop(); droneOsc.disconnect(); } } catch (e) {}
+    try { if (droneGain) droneGain.disconnect(); } catch (e) {}
+    droneOsc = null; droneGain = null;
+  }
+
+  // --- eyes-free verdict cue: the "listen back" signal carries the result ---
+  function verdictCue(mean, done) {
+    var ctx = ensureAudioCtx();
+    if (!ctx) { setTimeout(done, 0); return; }
+    var t = ctx.currentTime, total;
+    if (mean >= targetLow && mean <= targetHigh) {        // in band → pleasant rising chime
+      schedTone(ctx, t, 660, 0, 0.12, 0.25);
+      schedTone(ctx, t, 880, 0.13, 0.17, 0.25);
+      total = 340;
+    } else if (mean < targetLow) {                        // under → low tone
+      schedTone(ctx, t, 320, 0, 0.24, 0.26);
+      total = 300;
+    } else {                                              // over → high blip
+      schedTone(ctx, t, 1150, 0, 0.14, 0.22);
+      total = 220;
+    }
+    setTimeout(done, total);
+  }
+
+  // --- per-take pitch analysis (runs on the decoded AudioBuffer) ---
+  function analyzeTake(audioBuf) {
+    try {
+      var sr = audioBuf.sampleRate;
+      var data = audioBuf.getChannelData(0);
+      var factor = Math.max(1, Math.floor(sr / 8000));    // downsample to ~8 kHz for speed
+      var dsSr = sr / factor;
+      var dsLen = Math.floor(data.length / factor);
+      var ds = new Float32Array(dsLen);
+      for (var i = 0; i < dsLen; i++) {
+        var sum = 0, base = i * factor;
+        for (var k = 0; k < factor; k++) sum += data[base + k];
+        ds[i] = sum / factor;
+      }
+      var win = 1024, hop = 256, trace = [], voiced = [];
+      for (var start = 0; start + win <= dsLen; start += hop) {
+        var f = detectPitch(ds.subarray(start, start + win), dsSr);
+        trace.push({ t: start / dsSr, hz: f });
+        if (f) voiced.push(f);
+      }
+      if (!voiced.length) {
+        lastTakeMean = null;
+        renderTake(null, trace, audioBuf.duration);
+        log("take analysis: no voiced pitch");
+        return null;
+      }
+      var sorted = voiced.slice().sort(function (a, b) { return a - b; });
+      var mean = voiced.reduce(function (a, b) { return a + b; }, 0) / voiced.length;
+      var stats = {
+        mean: mean,
+        median: sorted[Math.floor(sorted.length / 2)],
+        min: sorted[0],
+        max: sorted[sorted.length - 1],
+        pctIn: Math.round(100 * voiced.filter(function (f) { return f >= targetLow && f <= targetHigh; }).length / voiced.length)
+      };
+      lastTakeMean = mean;
+      renderTake(stats, trace, audioBuf.duration);
+      log("take: mean " + Math.round(mean) + "Hz, range " + Math.round(stats.min) + "-" + Math.round(stats.max) + ", " + stats.pctIn + "% in band");
+      return stats;
+    } catch (e) { log("analyzeTake error: " + e); lastTakeMean = null; return null; }
+  }
+
+  function renderTake(stats, trace, dur) {
+    els.takeCard.hidden = false;
+    if (stats) {
+      els.takeStats.innerHTML =
+        "Mean <b>" + Math.round(stats.mean) + "</b> Hz &nbsp;·&nbsp; " +
+        "Range <b>" + Math.round(stats.min) + "–" + Math.round(stats.max) + "</b> Hz &nbsp;·&nbsp; " +
+        "In target <b class=\"" + (stats.pctIn >= 60 ? "good" : "") + "\">" + stats.pctIn + "%</b>";
+    } else {
+      els.takeStats.innerHTML = "No clear pitch detected in that take.";
+    }
+    drawTrace(trace, dur);
+  }
+
+  function drawTrace(trace, dur) {
+    var cv = els.takeTrace, ctx = cv.getContext("2d");
+    var W = cv.width, H = cv.height;
+    ctx.clearRect(0, 0, W, H);
+    var yHi = (1 - pitchToPct(targetHigh)) * H;
+    var yLo = (1 - pitchToPct(targetLow)) * H;
+    ctx.fillStyle = "rgba(126,242,155,.15)";
+    ctx.fillRect(0, yHi, W, yLo - yHi);
+    ctx.strokeStyle = "rgba(126,242,155,.45)"; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(0, yHi); ctx.lineTo(W, yHi); ctx.moveTo(0, yLo); ctx.lineTo(W, yLo); ctx.stroke();
+    if (trace.length) {
+      ctx.strokeStyle = "#f5a3b8"; ctx.lineWidth = 2; ctx.lineJoin = "round";
+      ctx.beginPath();
+      var pen = false;
+      for (var i = 0; i < trace.length; i++) {
+        var p = trace[i];
+        if (p.hz == null) { pen = false; continue; }
+        var x = dur > 0 ? (p.t / dur) * W : (i / trace.length) * W;
+        var y = (1 - pitchToPct(p.hz)) * H;
+        if (!pen) { ctx.moveTo(x, y); pen = true; } else ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+    }
   }
 
   function baseAudioConstraints() {
@@ -567,6 +949,7 @@
         stop();
         return;
       }
+      startDrone();       // headphones-only reference tone, if enabled
       startTimer(duration);
       clearTimeout(stopTimeout);
       stopTimeout = setTimeout(stopRecorder, duration * 1000);
@@ -583,6 +966,7 @@
   function handleStop() {
     recordArmed = false;
     clearTimeout(stopTimeout);
+    stopDrone();
     var type = mimeType || (chunks[0] && chunks[0].type) || "audio/webm";
     var blob = new Blob(chunks, { type: type });
     var size = blob.size;
@@ -591,7 +975,7 @@
     if (!running) { setPhase("idle"); return; }
     if (size > 0) {
       emptyStreak = 0;
-      playBack(blob);
+      playTake(blob);
     } else {
       // Empty recording (mic glitch). Retry a few times, but never loop forever.
       emptyStreak++;
@@ -607,27 +991,29 @@
     }
   }
 
-  function playBack(blob) {
+  // Decode the take ONCE, analyze its pitch, then play it back through the
+  // AudioContext. The "listen back" cue carries the pitch verdict when guide
+  // tones are on. Falls back to an <audio> element (no analysis) if decode
+  // fails, and a safety-net always advances the loop so it can never stall.
+  function playTake(blob) {
     setPhase("playing");
-    // Cue first, then play the take back.
-    playCue("play", function () {
-      if (!running) return;
-      playLoopClip(blob);
-    });
+    var ctx = ensureAudioCtx();
+    if (!ctx || !ctx.decodeAudioData || !blob.arrayBuffer) { playTakeFallback(blob); return; }
+    blob.arrayBuffer().then(function (buf) {
+      ctx.decodeAudioData(buf, function (audioBuf) {
+        if (!running) return;
+        var stats = analyzeTake(audioBuf);
+        var startPlayback = function () { if (running) playBuffer(audioBuf); };
+        if (guideTones && stats && stats.mean != null) verdictCue(stats.mean, startPlayback);
+        else playCue("play", startPlayback);
+      }, function (e) { log("decode failed: " + e); playTakeFallback(blob); });
+    }).catch(function (e) { log("arrayBuffer failed: " + e); playTakeFallback(blob); });
   }
 
-  // Play a recorded take as part of the running loop. iOS Safari blocks a
-  // media element's play() unless it's tied to a fresh tap, so we decode the
-  // blob and play it through the already-unlocked AudioContext, which has no
-  // such restriction. Falls back to an <audio> element, then to a plain timer,
-  // so the record→playback→record loop can never stall.
-  function playLoopClip(blob) {
-    var ctx = ensureAudioCtx();
+  function playBuffer(audioBuf) {
+    var ctx = audioCtx;
     var advanced = false;
-    // Universal safety-net: no matter what happens below (decode hangs,
-    // playback is blocked, onended never fires), the loop advances so it can
-    // never get stuck in "playing". Scheduled up front, before any async work.
-    var guard = setTimeout(function () { log("playback safety-net → next segment"); advance(); }, (duration + 3) * 1000);
+    var guard = setTimeout(function () { log("playback safety-net → next segment"); advance(); }, (Math.round(audioBuf.duration) + 3) * 1000);
     function advance() {
       if (advanced) return;
       advanced = true;
@@ -635,38 +1021,38 @@
       loopSource = null;
       if (running) beginRecording();
     }
+    try {
+      var src = ctx.createBufferSource();
+      src.buffer = audioBuf;
+      src.connect(ctx.destination);
+      src.onended = advance;
+      src.start();
+      loopSource = src;
+      log("playback start (" + audioBuf.duration.toFixed(1) + "s)");
+      startTimer(Math.max(1, Math.round(audioBuf.duration)));
+    } catch (e) { log("buffer play failed: " + e); advance(); }
+  }
 
-    function fallbackElement() {
+  // Rare path: decode unavailable/failed — play via <audio>, skip analysis.
+  function playTakeFallback(blob) {
+    var advanced = false;
+    var guard = setTimeout(function () { log("fallback safety-net → next segment"); advance(); }, (duration + 3) * 1000);
+    function advance() {
+      if (advanced) return;
+      advanced = true;
+      clearTimeout(guard);
+      if (running) beginRecording();
+    }
+    playCue("play", function () {
+      if (!running) return;
       log("playback via <audio> fallback");
       var url = URL.createObjectURL(blob);
       audioEl.src = url;
       startTimer(duration);
-      audioEl.onended = function () {
-        audioEl.onended = null;
-        URL.revokeObjectURL(url);
-        advance();
-      };
+      audioEl.onended = function () { audioEl.onended = null; URL.revokeObjectURL(url); advance(); };
       var p = audioEl.play();
       if (p && p.catch) p.catch(function (e) { log("audio.play blocked: " + e); });
-    }
-
-    if (!ctx || !ctx.decodeAudioData || !blob.arrayBuffer) { fallbackElement(); return; }
-
-    blob.arrayBuffer().then(function (buf) {
-      ctx.decodeAudioData(buf, function (audioBuf) {
-        if (!running) return;
-        try {
-          var src = ctx.createBufferSource();
-          src.buffer = audioBuf;
-          src.connect(ctx.destination);
-          src.onended = advance;
-          src.start();
-          loopSource = src;
-          log("playback start (" + audioBuf.duration.toFixed(1) + "s)");
-          startTimer(Math.max(1, Math.round(audioBuf.duration)));
-        } catch (e) { log("buffer play failed: " + e); fallbackElement(); }
-      }, function (e) { log("decode failed: " + e); fallbackElement(); });
-    }).catch(function (e) { log("arrayBuffer failed: " + e); fallbackElement(); });
+    });
   }
 
   async function start() {
@@ -714,7 +1100,9 @@
     els.lengthBox.setAttribute("aria-disabled", "true");
     els.micBox.setAttribute("aria-disabled", "true");
     els.micSelect.disabled = true;
-    log("session start · " + (mimeType || "default mime") + " · " + duration + "s segments");
+    els.targetBox.setAttribute("aria-disabled", "true");
+    startLiveMeter();   // real-time pitch feedback while recording
+    log("session start · " + (mimeType || "default mime") + " · target " + targetLow + "-" + targetHigh + "Hz · " + duration + "s segments");
     beginRecording();
   }
 
@@ -727,6 +1115,9 @@
     els.lengthBox.removeAttribute("aria-disabled");
     els.micBox.removeAttribute("aria-disabled");
     els.micSelect.disabled = false;
+    els.targetBox.removeAttribute("aria-disabled");
+    stopLiveMeter();
+    stopDrone();
     clearInterval(timerId);
     clearTimeout(stopTimeout);
     releaseWake();
@@ -767,6 +1158,66 @@
     // Verify what this option really opens (iOS labels can be reversed).
     probeSelectedMic();
   });
+
+  els.targetPresets.addEventListener("click", function (e) {
+    var btn = e.target.closest("button");
+    if (!btn || running) return;
+    var all = els.targetPresets.querySelectorAll("button");
+    for (var i = 0; i < all.length; i++) all[i].classList.remove("active");
+    btn.classList.add("active");
+    if (btn.hasAttribute("data-custom")) {
+      els.customRow.hidden = false;
+      els.customLo.value = targetLow;
+      els.customHi.value = targetHigh;
+    } else {
+      els.customRow.hidden = true;
+      applyTarget(parseInt(btn.getAttribute("data-lo"), 10), parseInt(btn.getAttribute("data-hi"), 10), true);
+    }
+  });
+  function readCustom() {
+    if (running) return;
+    var lo = parseInt(els.customLo.value, 10), hi = parseInt(els.customHi.value, 10);
+    if (!isFinite(lo) || !isFinite(hi)) return;
+    lo = Math.max(60, Math.min(500, lo));
+    hi = Math.max(60, Math.min(500, hi));
+    if (hi <= lo) hi = lo + 10;
+    applyTarget(lo, hi, true);
+  }
+  els.customLo.addEventListener("change", readCustom);
+  els.customHi.addEventListener("change", readCustom);
+
+  els.guideChk.checked = guideTones;
+  els.droneChk.checked = droneOn;
+  els.guideChk.addEventListener("change", function () {
+    guideTones = els.guideChk.checked;
+    try { localStorage.setItem("vl_guide", guideTones ? "1" : "0"); } catch (e) {}
+  });
+  els.droneChk.addEventListener("change", function () {
+    droneOn = els.droneChk.checked;
+    try { localStorage.setItem("vl_drone", droneOn ? "1" : "0"); } catch (e) {}
+    if (!droneOn) stopDrone();
+  });
+
+  // Initialize the target UI from saved/default values.
+  (function initTargetUI() {
+    els.targetVal.textContent = targetLow + "–" + targetHigh;
+    positionBand();
+    var all = els.targetPresets.querySelectorAll("button"), matched = false, i, b;
+    for (i = 0; i < all.length; i++) {
+      b = all[i]; b.classList.remove("active");
+      if (!b.hasAttribute("data-custom") &&
+          parseInt(b.getAttribute("data-lo"), 10) === targetLow &&
+          parseInt(b.getAttribute("data-hi"), 10) === targetHigh) {
+        b.classList.add("active"); matched = true;
+      }
+    }
+    if (!matched) {
+      for (i = 0; i < all.length; i++) { if (all[i].hasAttribute("data-custom")) all[i].classList.add("active"); }
+      els.customRow.hidden = false;
+      els.customLo.value = targetLow;
+      els.customHi.value = targetHigh;
+    }
+  })();
 
   document.getElementById("copyLog").onclick = function () {
     var text = logLines.join("\n") || "(empty)";
