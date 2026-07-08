@@ -251,6 +251,13 @@
     transform: scaleX(-1); /* mirror the webcam */
   }
   .bust img { transform: none; }
+  /* an oval-cropped upload is already feathered — drop the CSS mask so its
+     shape reads as an oval and its edges melt into the drape behind it */
+  .bust img.shot, #intro-mirror img.shot {
+    width: 100%; height: 100%; object-fit: contain;
+    -webkit-mask-image: none; mask-image: none;
+    transform: none; filter: drop-shadow(0 6px 18px rgba(0,0,0,0.22));
+  }
   .silhouette { width: 74%; height: 92%; display: block; filter: drop-shadow(0 6px 18px rgba(0,0,0,0.22)); }
 
   .stage.flash-l .drape.left::after,
@@ -379,6 +386,50 @@
   :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
 
   .footnote { text-align: center; color: var(--muted); font-size: 0.78rem; margin-top: 3rem; max-width: 62ch; margin-left: auto; margin-right: auto; }
+
+  /* ---------- oval cropper ---------- */
+  .cropper {
+    position: fixed; inset: 0; z-index: 60;
+    display: grid; place-items: center; padding: 1.2rem;
+    background: color-mix(in srgb, var(--bg) 55%, rgba(0,0,0,0.55));
+    backdrop-filter: blur(6px);
+    animation: fade 0.35s ease both;
+  }
+  .cropper[hidden] { display: none; }
+  .crop-panel {
+    background: var(--panel); border: 1px solid var(--hair);
+    border-radius: 18px; padding: clamp(1.2rem, 3.5vw, 1.8rem);
+    width: min(380px, 100%);
+    box-shadow: 0 40px 90px -40px var(--shadow);
+    text-align: center;
+  }
+  .crop-panel .display { font-size: clamp(1.4rem, 4.5vw, 1.9rem); margin: 0.3rem 0 0.15rem; }
+  .crop-panel .hint { color: var(--muted); font-size: 0.86rem; margin: 0 0 1.1rem; line-height: 1.4; }
+  .crop-view {
+    position: relative; width: 100%; aspect-ratio: 3/4;
+    margin: 0 auto; border-radius: 14px; overflow: hidden;
+    background: var(--stage); touch-action: none; cursor: grab;
+    box-shadow: inset 0 0 0 1px var(--hair-2);
+  }
+  .crop-view.grabbing { cursor: grabbing; }
+  .crop-view img { position: absolute; top: 0; left: 0; user-select: none; -webkit-user-drag: none; pointer-events: none; }
+  .crop-oval {
+    position: absolute; left: 6%; right: 6%; top: 4%; bottom: 4%;
+    border-radius: 50%; pointer-events: none;
+    border: 2px solid color-mix(in srgb, var(--accent) 85%, #fff);
+    box-shadow: 0 0 0 2000px rgba(0,0,0,0.5);
+  }
+  .crop-zoom {
+    display: flex; align-items: center; gap: 0.7rem;
+    margin: 1.1rem 0 1.3rem; padding: 0 0.2rem;
+  }
+  .crop-zoom .zlabel {
+    font-family: var(--mono); font-size: 0.66rem; letter-spacing: 0.2em;
+    text-transform: uppercase; color: var(--muted);
+  }
+  .crop-zoom input[type="range"] { flex: 1; accent-color: var(--accent); }
+  .crop-actions { display: flex; gap: 0.6rem; justify-content: center; }
+  .crop-actions .btn { padding: 0.6rem 1.2rem; }
 
   @media (prefers-reduced-motion: reduce) {
     * { animation-duration: 0.001s !important; transition-duration: 0.001s !important; }
@@ -520,6 +571,28 @@
     </section>
 
   </div>
+
+  <!-- ========== OVAL CROPPER ========== -->
+  <div class="cropper" id="cropper" hidden role="dialog" aria-modal="true" aria-label="Position your photo">
+    <div class="crop-panel">
+      <p class="eyebrow">Position your face</p>
+      <h2 class="display">Line up inside the oval</h2>
+      <p class="hint">Drag to move · pinch, scroll, or use the slider to zoom. Aim to fill the oval, chin near the bottom.</p>
+      <div class="crop-view" id="crop-view">
+        <img id="crop-img" alt="">
+        <div class="crop-oval"></div>
+      </div>
+      <div class="crop-zoom">
+        <span class="zlabel">zoom</span>
+        <input type="range" id="crop-zoom" min="1" max="3" step="0.01" value="1" aria-label="Zoom">
+      </div>
+      <div class="crop-actions">
+        <button class="btn" id="crop-cancel" type="button">Cancel</button>
+        <button class="btn primary" id="crop-ok" type="button">Use this photo</button>
+      </div>
+    </div>
+  </div>
+
   <div class="toast" id="toast">Copied to clipboard</div>
 </div>
 
@@ -631,7 +704,7 @@
   };
 
   // ---------- STATE ----------
-  var state = { mirror:"silhouette", stream:null, imgURL:null, i:0, acc:{temp:0,value:0,chroma:0}, locked:false };
+  var state = { mirror:"silhouette", stream:null, imgURL:null, cropped:false, prevMirror:"silhouette", i:0, acc:{temp:0,value:0,chroma:0}, locked:false };
 
   var $ = function(id){ return document.getElementById(id); };
 
@@ -654,14 +727,23 @@
     });
   }
 
+  function shotHTML(url) { return '<img class="shot" src="' + url + '" alt="Your cropped photo">'; }
+
   document.querySelectorAll(".choice").forEach(function (c) {
     c.addEventListener("click", function () {
       var kind = c.dataset.mirror;
-      if (kind === "upload") { $("fileinput").click(); setMirror("upload"); return; }
-      if (kind === "camera") { requestCamera(); return; }
+      if (kind === "upload") {
+        // remember where we were so a cancelled crop reverts cleanly
+        state.prevMirror = state.mirror;
+        var fi = $("fileinput");
+        fi.value = "";            // let re-picking the same file fire "change"
+        fi.click();
+        return;                  // mirror stays until the crop is confirmed
+      }
+      if (kind === "camera") { state.cropped = false; requestCamera(); return; }
       // silhouette
       stopCamera();
-      state.imgURL = null;
+      state.imgURL = null; state.cropped = false;
       setMirror("silhouette");
       introMirror.innerHTML = silhouetteSVG();
     });
@@ -670,11 +752,7 @@
   $("fileinput").addEventListener("change", function (e) {
     var f = e.target.files && e.target.files[0];
     if (!f) return;
-    if (state.imgURL) URL.revokeObjectURL(state.imgURL);
-    state.imgURL = URL.createObjectURL(f);
-    stopCamera();
-    setMirror("upload");
-    introMirror.innerHTML = '<img src="' + state.imgURL + '" alt="Your selfie" style="width:100%;height:100%;object-fit:cover;-webkit-mask-image:radial-gradient(120% 78% at 50% 42%, #000 55%, transparent 74%);mask-image:radial-gradient(120% 78% at 50% 42%, #000 55%, transparent 74%);">';
+    openCropper(f);
   });
 
   function requestCamera() {
@@ -710,11 +788,140 @@
       v.autoplay = true; v.playsInline = true; v.muted = true; v.srcObject = state.stream;
       bust.innerHTML = ""; bust.appendChild(v);
     } else if (state.mirror === "upload" && state.imgURL) {
-      bust.innerHTML = '<img src="' + state.imgURL + '" alt="You">';
+      bust.innerHTML = state.cropped ? shotHTML(state.imgURL) : '<img src="' + state.imgURL + '" alt="You">';
     } else {
       bust.innerHTML = silhouetteSVG();
     }
   }
+
+  // ---------- OVAL CROPPER ----------
+  // Pan + zoom a photo inside a 3:4 view, then export a feathered oval PNG
+  // whose transparent edges melt into the drape behind the face.
+  var INSET_X = 0.06, INSET_Y = 0.04;   // must match .crop-oval inset in CSS
+  var cropImg = null, cropURL = null;
+  var iw = 0, ih = 0, Wd = 0, Hd = 0, baseScale = 1, cz = 1, cpx = 0, cpy = 0;
+  var cropPts = {};
+
+  function openCropper(file) {
+    if (cropURL) { URL.revokeObjectURL(cropURL); cropURL = null; }
+    cropURL = URL.createObjectURL(file);
+    var im = new Image();
+    im.onload = function () {
+      cropImg = im;
+      iw = im.naturalWidth; ih = im.naturalHeight;
+      var modal = $("cropper");
+      modal.hidden = false;                 // reveal so the view has dimensions
+      var view = $("crop-view");
+      Wd = view.clientWidth; Hd = view.clientHeight;
+      baseScale = Math.max(Wd / iw, Hd / ih);
+      cz = 1; cpx = 0; cpy = 0;
+      $("crop-zoom").value = 1;
+      $("crop-img").src = cropURL;
+      layoutCrop();
+    };
+    im.onerror = function () { toast("Couldn't read that image — try another"); };
+    im.src = cropURL;
+  }
+
+  function layoutCrop() {
+    var s = baseScale * cz, w = iw * s, h = ih * s;
+    var maxX = Math.max(0, (w - Wd) / 2), maxY = Math.max(0, (h - Hd) / 2);
+    cpx = Math.max(-maxX, Math.min(maxX, cpx));
+    cpy = Math.max(-maxY, Math.min(maxY, cpy));
+    var ce = $("crop-img");
+    ce.style.width = w + "px"; ce.style.height = h + "px";
+    ce.style.left = ((Wd - w) / 2 + cpx) + "px";
+    ce.style.top = ((Hd - h) / 2 + cpy) + "px";
+  }
+
+  function setZoom(nz) {
+    cz = Math.max(1, Math.min(3, nz));
+    $("crop-zoom").value = cz;
+    layoutCrop();
+  }
+
+  function closeCropper() {
+    $("cropper").hidden = true;
+    if (cropURL) { URL.revokeObjectURL(cropURL); cropURL = null; }
+    cropPts = {};
+  }
+
+  function renderCrop() {
+    var f = 2;                              // supersample for crisp output
+    var Wo = Math.round(Wd * f), Ho = Math.round(Hd * f);
+    var s = baseScale * cz, w = iw * s, h = ih * s;
+    var left = (Wd - w) / 2 + cpx, top = (Hd - h) / 2 + cpy;
+    var cv = document.createElement("canvas"); cv.width = Wo; cv.height = Ho;
+    var ctx = cv.getContext("2d");
+    ctx.imageSmoothingQuality = "high";
+    ctx.drawImage(cropImg, left * f, top * f, w * f, h * f);
+    // feather to an oval: keep the image only where a soft ellipse is opaque
+    ctx.globalCompositeOperation = "destination-in";
+    var rx = (1 - 2 * INSET_X) * Wo / 2, ry = (1 - 2 * INSET_Y) * Ho / 2;
+    ctx.save();
+    ctx.translate(Wo / 2, Ho / 2); ctx.scale(rx, ry);
+    var g = ctx.createRadialGradient(0, 0, 0, 0, 0, 1);
+    g.addColorStop(0, "rgba(255,255,255,1)");
+    g.addColorStop(0.80, "rgba(255,255,255,1)");
+    g.addColorStop(1, "rgba(255,255,255,0)");
+    ctx.fillStyle = g; ctx.fillRect(-1, -1, 2, 2);
+    ctx.restore();
+    ctx.globalCompositeOperation = "source-over";
+    return cv.toDataURL("image/png");
+  }
+
+  (function wireCropper() {
+    var view = $("crop-view");
+    view.addEventListener("pointerdown", function (e) {
+      view.setPointerCapture(e.pointerId);
+      cropPts[e.pointerId] = { x: e.clientX, y: e.clientY };
+      view.classList.add("grabbing");
+    });
+    view.addEventListener("pointermove", function (e) {
+      if (!cropPts[e.pointerId]) return;
+      var ids = Object.keys(cropPts);
+      if (ids.length >= 2) {
+        var a = cropPts[ids[0]], b = cropPts[ids[1]];
+        var prev = Math.hypot(a.x - b.x, a.y - b.y);
+        cropPts[e.pointerId] = { x: e.clientX, y: e.clientY };
+        var a2 = cropPts[ids[0]], b2 = cropPts[ids[1]];
+        var dist = Math.hypot(a2.x - b2.x, a2.y - b2.y);
+        if (prev > 0) setZoom(cz * (dist / prev));
+      } else {
+        var p = cropPts[e.pointerId];
+        cpx += e.clientX - p.x; cpy += e.clientY - p.y;
+        cropPts[e.pointerId] = { x: e.clientX, y: e.clientY };
+        layoutCrop();
+      }
+    });
+    function endPt(e) {
+      delete cropPts[e.pointerId];
+      if (Object.keys(cropPts).length === 0) view.classList.remove("grabbing");
+    }
+    view.addEventListener("pointerup", endPt);
+    view.addEventListener("pointercancel", endPt);
+    view.addEventListener("wheel", function (e) {
+      e.preventDefault();
+      setZoom(cz * (e.deltaY < 0 ? 1.06 : 0.94));
+    }, { passive: false });
+
+    $("crop-zoom").addEventListener("input", function (e) { setZoom(parseFloat(e.target.value)); });
+
+    $("crop-ok").addEventListener("click", function () {
+      var url = renderCrop();
+      state.imgURL = url; state.cropped = true;
+      stopCamera();
+      setMirror("upload");
+      introMirror.innerHTML = shotHTML(url);
+      closeCropper();
+    });
+    function cancelCrop() { closeCropper(); setMirror(state.prevMirror); }
+    $("crop-cancel").addEventListener("click", cancelCrop);
+    $("cropper").addEventListener("click", function (e) { if (e.target === $("cropper")) cancelCrop(); });
+    document.addEventListener("keydown", function (e) {
+      if (e.key === "Escape" && !$("cropper").hidden) cancelCrop();
+    });
+  })();
 
   // ---------- FLOW ----------
   function show(id) {
