@@ -1,0 +1,951 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Drape Room — Seasonal Color Analysis</title>
+<meta name="description" content="Find the colors that make you glow. An interactive seasonal color analysis that drapes color under your face and names your season.">
+<meta name="theme-color" content="#E9E7E1" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#17181A" media="(prefers-color-scheme: dark)">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%8E%A8%3C/text%3E%3C/svg%3E">
+<style>
+  html, body { margin: 0; padding: 0; }
+  body { background: #E9E7E1; }
+  @media (prefers-color-scheme: dark) { body { background: #17181A; } }
+  :root[data-theme="light"] body { background: #E9E7E1; }
+  :root[data-theme="dark"] body { background: #17181A; }
+  img, svg, video { max-width: 100%; }
+</style>
+</head>
+<body>
+<style>
+  /* ============================================================
+     THE DRAPE ROOM — seasonal color analysis by draping
+     The room is neutral grey on purpose: real analysts work in
+     neutral studios so surrounding color never biases the eye.
+     All chroma is reserved for the drapes and the final palette.
+     ============================================================ */
+
+  :root {
+    --bg:        #E9E7E1;   /* warm graphite-grey studio wall */
+    --bg-2:      #E1DED7;
+    --panel:     #F3F1EC;
+    --panel-2:   #ECE9E3;
+    --ink:       #26251F;
+    --muted:     #6C6A61;
+    --faint:     #93908600;
+    --hair:      #CFCBC1;
+    --hair-2:    #D8D4CA;
+    --accent:    #A9824C;   /* antique brass — mirror frame gilt */
+    --accent-ink:#3C2E17;
+    --shadow:    rgba(40,38,30,0.16);
+    --stage:     #C9C6BE;   /* the neutral drape-room grey card */
+    --glow:      rgba(169,130,76,0.0);
+
+    --serif: Georgia, "Times New Roman", "Iowan Old Style", serif;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --mono: ui-monospace, "SF Mono", "SFMono-Regular", "Menlo", "Consolas", monospace;
+
+    --step: clamp(2px, 0.6vw, 6px);
+    --maxw: 1080px;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg:      #17181A;
+      --bg-2:    #131416;
+      --panel:   #202224;
+      --panel-2: #191B1D;
+      --ink:     #EAE8E2;
+      --muted:   #98958C;
+      --hair:    #2F3235;
+      --hair-2:  #26292B;
+      --accent:  #C6A063;
+      --accent-ink:#1C1608;
+      --shadow:  rgba(0,0,0,0.5);
+      --stage:   #2A2C2E;
+    }
+  }
+  :root[data-theme="light"] {
+    --bg:#E9E7E1; --bg-2:#E1DED7; --panel:#F3F1EC; --panel-2:#ECE9E3;
+    --ink:#26251F; --muted:#6C6A61; --hair:#CFCBC1; --hair-2:#D8D4CA;
+    --accent:#A9824C; --accent-ink:#3C2E17; --shadow:rgba(40,38,30,0.16); --stage:#C9C6BE;
+  }
+  :root[data-theme="dark"] {
+    --bg:#17181A; --bg-2:#131416; --panel:#202224; --panel-2:#191B1D;
+    --ink:#EAE8E2; --muted:#98958C; --hair:#2F3235; --hair-2:#26292B;
+    --accent:#C6A063; --accent-ink:#1C1608; --shadow:rgba(0,0,0,0.5); --stage:#2A2C2E;
+  }
+
+  * { box-sizing: border-box; }
+
+  .drape-app {
+    font-family: var(--sans);
+    color: var(--ink);
+    background:
+      radial-gradient(120% 80% at 50% -10%, var(--panel-2) 0%, transparent 60%),
+      var(--bg);
+    min-height: 100dvh;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+    letter-spacing: 0.01em;
+  }
+
+  .wrap {
+    max-width: var(--maxw);
+    margin: 0 auto;
+    padding: clamp(1.4rem, 4vw, 3rem) clamp(1.1rem, 4vw, 2.4rem) 4rem;
+  }
+
+  /* ---------- shared type ---------- */
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    letter-spacing: 0.32em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin: 0;
+  }
+  .display {
+    font-family: var(--serif);
+    font-weight: 400;
+    letter-spacing: 0.015em;
+    line-height: 1.02;
+    text-wrap: balance;
+    margin: 0;
+  }
+  h1.display { font-size: clamp(2.6rem, 8vw, 5.2rem); }
+  h2.display { font-size: clamp(1.8rem, 5vw, 3rem); }
+  .lede {
+    max-width: 60ch;
+    color: var(--muted);
+    font-size: clamp(1rem, 1.4vw, 1.15rem);
+  }
+
+  /* ---------- top bar ---------- */
+  .topbar {
+    display: flex; align-items: baseline; justify-content: space-between;
+    gap: 1rem; flex-wrap: wrap;
+    padding-bottom: 1.4rem;
+    border-bottom: 1px solid var(--hair);
+    margin-bottom: clamp(1.6rem, 5vw, 3.4rem);
+  }
+  .brand {
+    font-family: var(--serif);
+    font-size: 1.15rem; letter-spacing: 0.02em;
+  }
+  .brand b { font-weight: 400; }
+  .brand .dot { color: var(--accent); }
+  .themetog {
+    font-family: var(--mono); font-size: 0.7rem; letter-spacing: 0.18em;
+    text-transform: uppercase; color: var(--muted);
+    background: none; border: 1px solid var(--hair); border-radius: 999px;
+    padding: 0.45rem 0.9rem; cursor: pointer;
+  }
+  .themetog:hover { color: var(--ink); border-color: var(--accent); }
+
+  /* ---------- screens ---------- */
+  .screen { display: none; }
+  .screen.active { display: block; animation: fade 0.5s ease both; }
+  @keyframes fade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+  /* ---------- intro ---------- */
+  .intro-grid { display: grid; grid-template-columns: 1.1fr 0.9fr; gap: clamp(1.5rem, 5vw, 3.5rem); align-items: center; }
+  @media (max-width: 820px) { .intro-grid { grid-template-columns: 1fr; } }
+
+  .intro h1 { margin: 0.6rem 0 1.2rem; }
+  .intro .lede { margin-bottom: 2rem; }
+
+  .mirror-choice { margin-top: 1.8rem; }
+  .mirror-choice .eyebrow { margin-bottom: 0.8rem; }
+  .choices { display: flex; gap: 0.6rem; flex-wrap: wrap; }
+  .choice {
+    flex: 1 1 0; min-width: 120px;
+    display: flex; flex-direction: column; gap: 0.3rem; align-items: flex-start;
+    text-align: left;
+    background: var(--panel); border: 1px solid var(--hair);
+    border-radius: 12px; padding: 0.85rem 0.95rem; cursor: pointer;
+    color: var(--ink); font-family: var(--sans); font-size: 0.9rem;
+    transition: border-color 0.2s, background 0.2s, transform 0.15s;
+  }
+  .choice small { color: var(--muted); font-size: 0.74rem; line-height: 1.35; }
+  .choice .ic { font-size: 1.05rem; color: var(--accent); }
+  .choice:hover { transform: translateY(-2px); border-color: var(--accent); }
+  .choice[aria-pressed="true"] { border-color: var(--accent); background: var(--panel-2); box-shadow: inset 0 0 0 1px var(--accent); }
+
+  /* stage preview in intro */
+  .stage-frame {
+    position: relative; aspect-ratio: 3/4; width: 100%;
+    background: var(--stage);
+    border-radius: 16px;
+    box-shadow: 0 24px 60px -30px var(--shadow), inset 0 0 0 1px var(--hair-2);
+    overflow: hidden;
+    display: grid; place-items: center;
+  }
+  .frame-gilt {
+    position: absolute; inset: 10px; border-radius: 10px;
+    border: 2px solid color-mix(in srgb, var(--accent) 55%, transparent);
+    pointer-events: none; z-index: 5;
+  }
+
+  /* ---------- draping stage ---------- */
+  .drape-head { text-align: center; margin-bottom: 1.4rem; }
+  .drape-head .q { margin: 0.4rem 0 0.2rem; }
+  .drape-head .hint { color: var(--muted); font-size: 0.9rem; }
+
+  .stage {
+    position: relative;
+    aspect-ratio: 16/11;
+    max-height: 62vh;
+    margin: 0 auto;
+    border-radius: 18px;
+    overflow: hidden;
+    box-shadow: 0 30px 70px -34px var(--shadow), inset 0 0 0 1px var(--hair-2);
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    background: var(--stage);
+    isolation: isolate;
+  }
+  .drape {
+    position: relative;
+    border: none; cursor: pointer; padding: 0;
+    transition: transform 0.45s cubic-bezier(.2,.8,.2,1), filter 0.3s;
+    color: #fff;
+  }
+  .drape::after {
+    content: ""; position: absolute; inset: 0;
+    box-shadow: inset 0 0 90px rgba(0,0,0,0.14);
+  }
+  .drape .dlabel {
+    position: absolute; left: 0; right: 0; bottom: 0;
+    font-family: var(--mono); font-size: 0.68rem; letter-spacing: 0.16em;
+    text-transform: uppercase;
+    padding: 0.7rem; text-align: center;
+    background: linear-gradient(to top, rgba(0,0,0,0.42), transparent);
+    opacity: 0; transition: opacity 0.25s; z-index: 4;
+  }
+  .drape:hover .dlabel, .drape:focus-visible .dlabel { opacity: 1; }
+  .drape.left  { border-radius: 18px 0 0 18px; }
+  .drape.right { border-radius: 0 18px 18px 0; }
+  .drape:hover { filter: brightness(1.04); z-index: 3; }
+  .drape.picked { z-index: 6; transform: scale(1.02); }
+  .drape.dimmed { filter: brightness(0.6) saturate(0.5); }
+
+  /* the mirror bust — sits over the seam so both drapes frame the face */
+  .mirror {
+    position: absolute; top: 0; bottom: 0; left: 50%;
+    transform: translateX(-50%);
+    width: min(46%, 340px);
+    z-index: 5;
+    display: grid; place-items: end center;
+    pointer-events: none;
+  }
+  .bust {
+    position: relative; width: 100%; height: 100%;
+    display: grid; place-items: end center;
+  }
+  .bust video, .bust img {
+    width: 100%; height: 100%; object-fit: cover;
+    -webkit-mask-image: radial-gradient(120% 78% at 50% 42%, #000 55%, transparent 74%);
+    mask-image: radial-gradient(120% 78% at 50% 42%, #000 55%, transparent 74%);
+    transform: scaleX(-1); /* mirror the webcam */
+  }
+  .bust img { transform: none; }
+  .silhouette { width: 74%; height: 92%; display: block; filter: drop-shadow(0 6px 18px rgba(0,0,0,0.22)); }
+
+  .stage.flash-l .drape.left::after,
+  .stage.flash-r .drape.right::after { box-shadow: inset 0 0 120px rgba(255,255,255,0.35); }
+
+  .vs {
+    position: absolute; top: 0.8rem; left: 50%; transform: translateX(-50%);
+    z-index: 7; font-family: var(--serif); font-style: italic;
+    font-size: 1rem; color: #fff; text-shadow: 0 1px 6px rgba(0,0,0,0.4);
+    background: rgba(0,0,0,0.18); backdrop-filter: blur(2px);
+    padding: 0.15rem 0.7rem; border-radius: 999px;
+  }
+
+  /* controls under stage */
+  .stage-controls {
+    display: flex; align-items: center; justify-content: center; gap: 1rem;
+    margin-top: 1.1rem; flex-wrap: wrap;
+  }
+  .pick-btn {
+    font-family: var(--sans); font-size: 0.92rem;
+    background: var(--panel); color: var(--ink);
+    border: 1px solid var(--hair); border-radius: 999px;
+    padding: 0.6rem 1.3rem; cursor: pointer; transition: 0.18s;
+  }
+  .pick-btn:hover { border-color: var(--accent); transform: translateY(-1px); }
+  .ghost {
+    background: none; border: none; color: var(--muted);
+    font-family: var(--mono); font-size: 0.72rem; letter-spacing: 0.14em;
+    text-transform: uppercase; cursor: pointer; padding: 0.5rem 0.6rem;
+  }
+  .ghost:hover { color: var(--ink); }
+
+  /* ---------- dials / progress ---------- */
+  .dials {
+    display: flex; gap: 1.6rem; justify-content: center; flex-wrap: wrap;
+    margin: 1.8rem auto 0;
+    padding-top: 1.4rem; border-top: 1px solid var(--hair);
+    max-width: 640px;
+  }
+  .dial { text-align: center; min-width: 150px; flex: 1; }
+  .dial .name { font-family: var(--mono); font-size: 0.66rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--muted); }
+  .dial .track {
+    position: relative; height: 6px; margin: 0.55rem 0 0.35rem;
+    background: var(--hair-2); border-radius: 999px;
+  }
+  .dial .track::before {
+    content: ""; position: absolute; left: 50%; top: -3px; bottom: -3px;
+    width: 1px; background: var(--hair);
+  }
+  .dial .fill {
+    position: absolute; top: 0; bottom: 0; width: 0; left: 50%;
+    background: var(--accent); border-radius: 999px;
+    transition: width 0.5s ease, left 0.5s ease;
+  }
+  .dial .poles { display: flex; justify-content: space-between; font-size: 0.68rem; color: var(--muted); }
+  .dial .poles b { font-weight: 600; color: var(--ink); }
+
+  /* ---------- result ---------- */
+  .reveal-head { text-align: center; margin-bottom: 2.4rem; }
+  .reveal-head .eyebrow { margin-bottom: 0.7rem; }
+  .season-name { font-size: clamp(2.8rem, 9vw, 5.4rem); margin: 0.2rem 0; }
+  .season-tag { font-family: var(--serif); font-style: italic; color: var(--muted); font-size: clamp(1.05rem, 2.4vw, 1.4rem); }
+
+  .swatch-wall {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
+    gap: 6px; margin: 2rem 0;
+    border-radius: 14px; overflow: hidden;
+    box-shadow: inset 0 0 0 1px var(--hair-2);
+  }
+  .sw {
+    aspect-ratio: 3/4; position: relative; display: flex; align-items: flex-end;
+    animation: swin 0.6s cubic-bezier(.2,.8,.2,1) both;
+  }
+  @keyframes swin { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+  .sw span {
+    font-family: var(--mono); font-size: 0.6rem; letter-spacing: 0.06em;
+    padding: 0.45rem 0.5rem; width: 100%;
+    background: linear-gradient(to top, rgba(0,0,0,0.4), transparent);
+    color: #fff; opacity: 0; transition: opacity 0.2s;
+  }
+  .sw:hover span { opacity: 1; }
+
+  .result-grid { display: grid; grid-template-columns: 1.2fr 0.8fr; gap: clamp(1.2rem, 4vw, 2.6rem); }
+  @media (max-width: 780px) { .result-grid { grid-template-columns: 1fr; } }
+
+  .card {
+    background: var(--panel); border: 1px solid var(--hair);
+    border-radius: 14px; padding: clamp(1.1rem, 3vw, 1.7rem);
+  }
+  .card h3 {
+    font-family: var(--mono); font-size: 0.7rem; letter-spacing: 0.2em;
+    text-transform: uppercase; color: var(--muted); margin: 0 0 0.9rem;
+  }
+  .card p { margin: 0 0 0.7rem; }
+  .card p:last-child { margin-bottom: 0; }
+  .whytext { font-family: var(--serif); font-size: 1.12rem; line-height: 1.5; }
+  .whytext b { color: var(--accent); font-weight: 400; font-style: italic; }
+
+  .chips { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.4rem; }
+  .chip {
+    display: inline-flex; align-items: center; gap: 0.5rem;
+    font-size: 0.82rem; padding: 0.35rem 0.7rem 0.35rem 0.4rem;
+    border: 1px solid var(--hair); border-radius: 999px; background: var(--panel-2);
+  }
+  .chip i { width: 16px; height: 16px; border-radius: 50%; display: inline-block; box-shadow: inset 0 0 0 1px rgba(0,0,0,0.12); }
+
+  .avoid .chip { text-decoration: line-through; text-decoration-color: var(--muted); color: var(--muted); }
+
+  .actions { display: flex; gap: 0.8rem; flex-wrap: wrap; justify-content: center; margin-top: 2.6rem; }
+  .btn {
+    font-family: var(--sans); font-size: 0.95rem; cursor: pointer;
+    border-radius: 999px; padding: 0.75rem 1.6rem; border: 1px solid var(--hair);
+    background: var(--panel); color: var(--ink); transition: 0.18s;
+  }
+  .btn:hover { transform: translateY(-1px); border-color: var(--accent); }
+  .btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 600; }
+  .btn.primary:hover { filter: brightness(1.06); }
+
+  .toast {
+    position: fixed; left: 50%; bottom: 2rem; transform: translateX(-50%) translateY(20px);
+    background: var(--ink); color: var(--bg); padding: 0.7rem 1.2rem; border-radius: 999px;
+    font-size: 0.85rem; opacity: 0; pointer-events: none; transition: 0.3s; z-index: 40;
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+
+  .footnote { text-align: center; color: var(--muted); font-size: 0.78rem; margin-top: 3rem; max-width: 62ch; margin-left: auto; margin-right: auto; }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { animation-duration: 0.001s !important; transition-duration: 0.001s !important; }
+  }
+</style>
+
+<div class="drape-app">
+  <div class="wrap">
+
+    <div class="topbar">
+      <div class="brand"><b>The Drape&nbsp;Room</b> <span class="dot">◆</span> <span style="font-family:var(--mono);font-size:0.72rem;letter-spacing:0.18em;color:var(--muted);">COLOR STUDIO</span></div>
+      <button class="themetog" id="themetog" type="button">Light / Dark</button>
+    </div>
+
+    <!-- ========== SCREEN 1: INTRO ========== -->
+    <section class="screen active" id="s-intro">
+      <div class="intro-grid intro">
+        <div>
+          <p class="eyebrow">Seasonal color analysis · by draping</p>
+          <h1 class="display">Find the colors<br>that make you glow.</h1>
+          <p class="lede">No quiz, no guesswork. We drape you the way a professional analyst does — holding color after color beneath your face — and watch for the one moment your skin lights up. Choose the drape you glow in; we read the light and name your season.</p>
+
+          <div class="mirror-choice">
+            <p class="eyebrow">Choose your mirror</p>
+            <div class="choices" role="group" aria-label="Choose how to see yourself">
+              <button class="choice" data-mirror="camera" aria-pressed="false" type="button">
+                <span class="ic">◉</span> Live mirror
+                <small>Use your camera so drapes fall around your real face.</small>
+              </button>
+              <button class="choice" data-mirror="upload" aria-pressed="false" type="button">
+                <span class="ic">▤</span> Upload a selfie
+                <small>Bright, even light works best. Stays on your device.</small>
+              </button>
+              <button class="choice" data-mirror="silhouette" aria-pressed="true" type="button">
+                <span class="ic">◐</span> Just the drapes
+                <small>Use your own mirror; judge the color against a plain form.</small>
+              </button>
+            </div>
+            <input type="file" id="fileinput" accept="image/*" hidden>
+          </div>
+
+          <div class="actions" style="justify-content:flex-start;margin-top:1.8rem;">
+            <button class="btn primary" id="begin" type="button">Enter the drape room →</button>
+          </div>
+        </div>
+
+        <div class="stage-frame" aria-hidden="true">
+          <div class="frame-gilt"></div>
+          <div id="intro-mirror" style="width:70%;height:88%;display:grid;place-items:end center;"></div>
+        </div>
+      </div>
+
+      <p class="footnote">Color analysis sorts you by three qualities of light — warm or cool, light or deep, bright or soft. Nine quick comparisons is all it takes.</p>
+    </section>
+
+    <!-- ========== SCREEN 2: DRAPING ========== -->
+    <section class="screen" id="s-drape">
+      <div class="drape-head">
+        <p class="eyebrow" id="round-label">Temperature · drape 1 of 3</p>
+        <h2 class="display q" id="round-q">Which drape lights up your face?</h2>
+        <p class="hint">Look at your skin, not the color. Pick where you look brightest and most awake.</p>
+      </div>
+
+      <div class="stage" id="stage">
+        <button class="drape left" id="drape-l" type="button" aria-label="Choose left drape">
+          <span class="dlabel" id="dlabel-l">warm</span>
+        </button>
+        <button class="drape right" id="drape-r" type="button" aria-label="Choose right drape">
+          <span class="dlabel" id="dlabel-r">cool</span>
+        </button>
+        <div class="vs">or</div>
+        <div class="mirror"><div class="bust" id="bust"></div></div>
+      </div>
+
+      <div class="stage-controls">
+        <button class="pick-btn" id="pick-l" type="button">This one ◂</button>
+        <button class="ghost" id="pick-none" type="button">Can't tell — show another</button>
+        <button class="pick-btn" id="pick-r" type="button">▸ This one</button>
+      </div>
+
+      <div class="dials" id="dials">
+        <div class="dial" data-axis="temp">
+          <div class="name">Temperature</div>
+          <div class="track"><div class="fill"></div></div>
+          <div class="poles"><span>cool</span><span>warm</span></div>
+        </div>
+        <div class="dial" data-axis="value">
+          <div class="name">Value</div>
+          <div class="track"><div class="fill"></div></div>
+          <div class="poles"><span>deep</span><span>light</span></div>
+        </div>
+        <div class="dial" data-axis="chroma">
+          <div class="name">Chroma</div>
+          <div class="track"><div class="fill"></div></div>
+          <div class="poles"><span>soft</span><span>bright</span></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========== SCREEN 3: RESULT ========== -->
+    <section class="screen" id="s-result">
+      <div class="reveal-head">
+        <p class="eyebrow">The room comes to color</p>
+        <h2 class="display season-name" id="r-name">—</h2>
+        <p class="season-tag" id="r-tag">—</p>
+      </div>
+
+      <div class="swatch-wall" id="r-wall"></div>
+
+      <div class="result-grid">
+        <div style="display:flex;flex-direction:column;gap:1rem;">
+          <div class="card">
+            <h3>Why this season</h3>
+            <p class="whytext" id="r-why">—</p>
+          </div>
+          <div class="card">
+            <h3>Your neutrals — the quiet backbone</h3>
+            <div class="chips" id="r-neutrals"></div>
+          </div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:1rem;">
+          <div class="card">
+            <h3>How you read on the dials</h3>
+            <div class="dials" id="r-dials" style="border:none;margin:0;padding:0;flex-direction:column;gap:1.1rem;max-width:none;"></div>
+          </div>
+          <div class="card avoid">
+            <h3>Colors that fight you</h3>
+            <div class="chips" id="r-avoid"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="actions">
+        <button class="btn primary" id="copy" type="button">Copy my palette</button>
+        <button class="btn" id="restart" type="button">Drape again</button>
+      </div>
+
+      <p class="footnote">A screen can only get you close — light, camera, and calibration all shift color. Treat this as a confident starting point, then confirm the winners against your face in daylight.</p>
+    </section>
+
+  </div>
+  <div class="toast" id="toast">Copied to clipboard</div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  // ---------- neutral bust silhouette (SVG) ----------
+  function silhouetteSVG() {
+    return '<svg class="silhouette" viewBox="0 0 120 150" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">' +
+      '<defs><linearGradient id="sk" x1="0" y1="0" x2="0" y2="1">' +
+      '<stop offset="0" stop-color="#d9d5cc"/><stop offset="1" stop-color="#bdb9b0"/></linearGradient></defs>' +
+      '<path fill="url(#sk)" d="M60 8c15 0 25 12 25 30 0 12-4 20-9 26 3 2 10 4 18 7 14 5 20 12 22 30 1 8 1 20 1 20H3s0-12 1-20c2-18 8-25 22-30 8-3 15-5 18-7-5-6-9-14-9-26C35 20 45 8 60 8z"/>' +
+      '</svg>';
+  }
+
+  // ---------- THE DRAPE PAIRS (each isolates one axis) ----------
+  // pole: warm/cool -> temperature ; light/deep -> value ; bright/soft -> chroma
+  var PAIRS = [
+    { axis:"temp", label:"Temperature",
+      l:{name:"warm coral",   hex:"#FF7A59", pole:"warm"},
+      r:{name:"cool orchid",  hex:"#E0558E", pole:"cool"} },
+    { axis:"temp", label:"Temperature",
+      l:{name:"warm ivory",   hex:"#F1E4C0", pole:"warm"},
+      r:{name:"cool snow",    hex:"#EDF2F5", pole:"cool"} },
+    { axis:"temp", label:"Temperature",
+      l:{name:"amber gold",   hex:"#D9A32B", pole:"warm"},
+      r:{name:"sapphire",     hex:"#2E5AC0", pole:"cool"} },
+
+    { axis:"value", label:"Value",
+      l:{name:"blush light",  hex:"#F5C9CE", pole:"light"},
+      r:{name:"deep plum",    hex:"#4E2440", pole:"deep"} },
+    { axis:"value", label:"Value",
+      l:{name:"butter light", hex:"#F6E6A2", pole:"light"},
+      r:{name:"deep bronze",  hex:"#5E4420", pole:"deep"} },
+
+    { axis:"chroma", label:"Chroma",
+      l:{name:"clear turquoise", hex:"#10B9CC", pole:"bright"},
+      r:{name:"dusty teal",      hex:"#6E9A96", pole:"soft"} },
+    { axis:"chroma", label:"Chroma",
+      l:{name:"clear scarlet",   hex:"#E23A2E", pole:"bright"},
+      r:{name:"soft brick",      hex:"#B06A5E", pole:"soft"} },
+    { axis:"chroma", label:"Chroma",
+      l:{name:"clear orchid",    hex:"#8A3FE0", pole:"bright"},
+      r:{name:"soft mauve",      hex:"#9C8AA8", pole:"soft"} }
+  ];
+  var axisCount = { temp:0, value:0, chroma:0 };
+  PAIRS.forEach(function(p){ axisCount[p.axis]++; });
+
+  // ---------- THE 12 SEASONS ----------
+  // target coords on 3 axes: warmCool(-cool..+warm), lightDeep(-deep..+light), brightSoft(-soft..+bright)
+  function C(n){ return {name:n.name, hex:n.hex}; }
+  var SEASONS = [
+    { key:"bright-spring", name:"Bright Spring", tag:"clear, sunlit, electric warmth",
+      t:[0.5,0.3,0.9], power:{name:"bright coral",hex:"#FF6F52"},
+      pal:["#FF6F52","#16C7C9","#FFC223","#4CC13B","#FF4D8D","#6E7BFF","#FF9E1B","#20D3B0"],
+      neutrals:["#26324D","#B79B7E","#FBF3E2"], avoid:["#6E6247","#9C8AA8","#101114"] },
+    { key:"true-spring", name:"True Spring", tag:"golden, fresh, brimming",
+      t:[0.9,0.4,0.6], power:{name:"warm coral",hex:"#FF7A4D"},
+      pal:["#FF7A4D","#18BFA5","#FFCB2E","#7DBE3C","#FF8FA3","#3FD0C9","#E8A02B","#B7D23A"],
+      neutrals:["#6B4A2B","#C79A5B","#F6ECD2"], avoid:["#0E0F12","#8894A6","#8A6B8C"] },
+    { key:"light-spring", name:"Light Spring", tag:"delicate, warm, luminous",
+      t:[0.4,0.9,0.5], power:{name:"warm peach",hex:"#FFB79A"},
+      pal:["#FFC7A8","#B8EAC6","#FBE7A1","#FFA797","#9FE3DA","#A9B4F2","#F6C9D6","#CDE79A"],
+      neutrals:["#DAD2C4","#D9BE95","#FBF6EC"], avoid:["#101114","#6E1330","#3E5E2E"] },
+
+    { key:"light-summer", name:"Light Summer", tag:"soft, cool, watercolor",
+      t:[-0.4,0.9,-0.3], power:{name:"cool periwinkle",hex:"#9FB0E6"},
+      pal:["#A9C9E8","#F3C0D0","#C9BEE6","#BFE5D6","#9FB0E6","#D785A6","#BFD9E8","#D9C7E6"],
+      neutrals:["#CFD3DA","#D9C3BE","#F3F5F8"], avoid:["#C05A2B","#5A5A22","#0E0F12"] },
+    { key:"true-summer", name:"True Summer", tag:"cool, gentle, dusk-blue",
+      t:[-0.7,0.2,-0.6], power:{name:"soft fuchsia",hex:"#C25E93"},
+      pal:["#5C86C4","#C25E93","#4C8C86","#7C8CD8","#9C6E97","#B23A6B","#6EA2C4","#A98ABE"],
+      neutrals:["#8894A6","#6C5B5B","#EEF1F4"], avoid:["#E08A2B","#FFCB2E","#0E0F12"] },
+    { key:"soft-summer", name:"Soft Summer", tag:"muted, cool, smoke",
+      t:[-0.4,-0.1,-0.9], power:{name:"mauve rose",hex:"#C0899A"},
+      pal:["#7E96AE","#C0899A","#8FA394","#8A6B8C","#6E9A96","#C2A3A6","#93A8B0","#A98CA0"],
+      neutrals:["#7C8288","#A69A8E","#E9E6E2"], avoid:["#E51022","#FF6F52","#101114"] },
+
+    { key:"soft-autumn", name:"Soft Autumn", tag:"muted, warm, honeyed",
+      t:[0.4,-0.2,-0.9], power:{name:"dusty salmon",hex:"#E29179"},
+      pal:["#E29179","#9EA36A","#5E9A94","#B98A82","#C9A45C","#D89A82","#88996A","#C08E6E"],
+      neutrals:["#A8927A","#6E6247","#E8E0D0"], avoid:["#1E4FD8","#E81E80","#0E0F12"] },
+    { key:"true-autumn", name:"True Autumn", tag:"rich, warm, harvest",
+      t:[0.9,-0.4,-0.6], power:{name:"burnt rust",hex:"#C05A2B"},
+      pal:["#C05A2B","#6F7A2E","#1E7A6E","#E08A2B","#D0A028","#A83E2B","#3E5E2E","#B87333"],
+      neutrals:["#4E3620","#B98A4B","#F1E4C6"], avoid:["#D785A6","#A9C9E8","#F3F5F8"] },
+    { key:"deep-autumn", name:"Deep Autumn", tag:"deep, warm, smoldering",
+      t:[0.5,-0.9,-0.3], power:{name:"deep rust",hex:"#9A3B22"},
+      pal:["#9A3B22","#23492E","#7A3B2E","#0E5A5A","#B8862B","#C0392B","#5A5A22","#7A2E3A"],
+      neutrals:["#2E2018","#8A5E33","#EDE0C4"], avoid:["#BFE5D6","#F3C0D0","#A9C9E8"] },
+
+    { key:"deep-winter", name:"Deep Winter", tag:"deep, cool, midnight",
+      t:[-0.5,-0.9,0.3], power:{name:"deep fuchsia",hex:"#A81E5C"},
+      pal:["#12433B","#A81E5C","#1F3A8A","#6E1330","#0E5C3E","#3A1E5E","#C01326","#153A6E"],
+      neutrals:["#101114","#2A2C30","#F2F4F6"], avoid:["#E29179","#C9A45C","#E8E0D0"] },
+    { key:"true-winter", name:"True Winter", tag:"clear, cool, icy",
+      t:[-0.8,-0.3,0.6], power:{name:"true red",hex:"#E01020"},
+      pal:["#D01A7A","#1E4FD8","#0E8A5F","#E01020","#BFE0EF","#5A2AAE","#0E8AC4","#8A1EC4"],
+      neutrals:["#0E0F12","#6B7280","#FCFDFF"], avoid:["#E08A2B","#C9A45C","#9EA36A"] },
+    { key:"bright-winter", name:"Bright Winter", tag:"bright, cool, high-voltage",
+      t:[-0.4,-0.2,0.9], power:{name:"electric magenta",hex:"#E81E80"},
+      pal:["#1E6BFF","#E81E80","#00A86B","#E51022","#F2F0A0","#6A1EE0","#10C4E0","#00D0A0"],
+      neutrals:["#0D0E11","#7A8290","#FFFFFF"], avoid:["#9EA36A","#B98A82","#E8E0D0"] }
+  ];
+
+  var POLE_WORD = {
+    warm:"warm", cool:"cool", light:"light", deep:"deep", bright:"bright, clear", soft:"soft, muted"
+  };
+
+  // ---------- STATE ----------
+  var state = { mirror:"silhouette", stream:null, imgURL:null, i:0, acc:{temp:0,value:0,chroma:0}, locked:false };
+
+  var $ = function(id){ return document.getElementById(id); };
+
+  // ---------- THEME ----------
+  $("themetog").addEventListener("click", function () {
+    var root = document.documentElement;
+    var now = root.getAttribute("data-theme");
+    var isDark = now ? now === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+    root.setAttribute("data-theme", isDark ? "light" : "dark");
+  });
+
+  // ---------- MIRROR SETUP ----------
+  var introMirror = $("intro-mirror");
+  introMirror.innerHTML = silhouetteSVG();
+
+  function setMirror(kind) {
+    state.mirror = kind;
+    document.querySelectorAll(".choice").forEach(function (c) {
+      c.setAttribute("aria-pressed", c.dataset.mirror === kind ? "true" : "false");
+    });
+  }
+
+  document.querySelectorAll(".choice").forEach(function (c) {
+    c.addEventListener("click", function () {
+      var kind = c.dataset.mirror;
+      if (kind === "upload") { $("fileinput").click(); setMirror("upload"); return; }
+      if (kind === "camera") { requestCamera(); return; }
+      // silhouette
+      stopCamera();
+      state.imgURL = null;
+      setMirror("silhouette");
+      introMirror.innerHTML = silhouetteSVG();
+    });
+  });
+
+  $("fileinput").addEventListener("change", function (e) {
+    var f = e.target.files && e.target.files[0];
+    if (!f) return;
+    if (state.imgURL) URL.revokeObjectURL(state.imgURL);
+    state.imgURL = URL.createObjectURL(f);
+    stopCamera();
+    setMirror("upload");
+    introMirror.innerHTML = '<img src="' + state.imgURL + '" alt="Your selfie" style="width:100%;height:100%;object-fit:cover;-webkit-mask-image:radial-gradient(120% 78% at 50% 42%, #000 55%, transparent 74%);mask-image:radial-gradient(120% 78% at 50% 42%, #000 55%, transparent 74%);">';
+  });
+
+  function requestCamera() {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      toast("Camera unavailable — using upload instead");
+      $("fileinput").click(); setMirror("upload"); return;
+    }
+    navigator.mediaDevices.getUserMedia({ video: { facingMode: "user", width: 640, height: 800 }, audio: false })
+      .then(function (stream) {
+        state.stream = stream;
+        setMirror("camera");
+        var v = document.createElement("video");
+        v.autoplay = true; v.playsInline = true; v.muted = true;
+        v.srcObject = stream;
+        introMirror.innerHTML = "";
+        introMirror.appendChild(v);
+      })
+      .catch(function () {
+        toast("Camera blocked — pick a selfie instead");
+        setMirror("silhouette");
+        introMirror.innerHTML = silhouetteSVG();
+      });
+  }
+  function stopCamera() {
+    if (state.stream) { state.stream.getTracks().forEach(function (t) { t.stop(); }); state.stream = null; }
+  }
+
+  // build the bust content for the drape stage
+  function renderBust() {
+    var bust = $("bust");
+    if (state.mirror === "camera" && state.stream) {
+      var v = document.createElement("video");
+      v.autoplay = true; v.playsInline = true; v.muted = true; v.srcObject = state.stream;
+      bust.innerHTML = ""; bust.appendChild(v);
+    } else if (state.mirror === "upload" && state.imgURL) {
+      bust.innerHTML = '<img src="' + state.imgURL + '" alt="You">';
+    } else {
+      bust.innerHTML = silhouetteSVG();
+    }
+  }
+
+  // ---------- FLOW ----------
+  function show(id) {
+    document.querySelectorAll(".screen").forEach(function (s) { s.classList.remove("active"); });
+    $(id).classList.add("active");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  $("begin").addEventListener("click", function () {
+    state.i = 0; state.acc = { temp:0, value:0, chroma:0 };
+    renderBust();
+    show("s-drape");
+    renderPair();
+  });
+
+  function renderPair() {
+    var p = PAIRS[state.i];
+    var idxInAxis = PAIRS.slice(0, state.i + 1).filter(function (x) { return x.axis === p.axis; }).length;
+    $("round-label").textContent = p.label + " · drape " + idxInAxis + " of " + axisCount[p.axis];
+
+    var qmap = {
+      temp:  "Warm or cool — which clears your skin?",
+      value: "Light or deep — which brings you forward?",
+      chroma:"Bright or soft — which sharpens your features?"
+    };
+    $("round-q").textContent = qmap[p.axis];
+
+    var dl = $("drape-l"), dr = $("drape-r");
+    dl.style.background = p.l.hex; dr.style.background = p.r.hex;
+    dl.classList.remove("picked","dimmed"); dr.classList.remove("picked","dimmed");
+    $("dlabel-l").textContent = p.l.name;
+    $("dlabel-r").textContent = p.r.name;
+    state.locked = false;
+  }
+
+  function choose(side) {
+    if (state.locked) return;
+    state.locked = true;
+    var p = PAIRS[state.i];
+    var chosen = side === "l" ? p.l : p.r;
+    var pole = chosen.pole;
+
+    // accumulate: + toward warm/light/bright, - toward cool/deep/soft
+    if (pole === "warm")  state.acc.temp   += 1;
+    if (pole === "cool")  state.acc.temp   -= 1;
+    if (pole === "light") state.acc.value  += 1;
+    if (pole === "deep")  state.acc.value  -= 1;
+    if (pole === "bright")state.acc.chroma += 1;
+    if (pole === "soft")  state.acc.chroma -= 1;
+
+    // visual confirmation
+    var stage = $("stage");
+    $("drape-" + side).classList.add("picked");
+    $("drape-" + (side === "l" ? "r" : "l")).classList.add("dimmed");
+    stage.classList.add(side === "l" ? "flash-l" : "flash-r");
+    updateDials();
+
+    setTimeout(function () {
+      stage.classList.remove("flash-l", "flash-r");
+      state.i++;
+      if (state.i >= PAIRS.length) { finish(); }
+      else { renderPair(); }
+    }, 620);
+  }
+
+  function skip() {
+    if (state.locked) return;
+    // no signal added — reshuffle by moving this pair to the end once
+    var p = PAIRS.splice(state.i, 1)[0];
+    PAIRS.push(p);
+    // guard against infinite skipping: if we've looped, just advance
+    renderPair();
+  }
+
+  $("drape-l").addEventListener("click", function () { choose("l"); });
+  $("drape-r").addEventListener("click", function () { choose("r"); });
+  $("pick-l").addEventListener("click", function () { choose("l"); });
+  $("pick-r").addEventListener("click", function () { choose("r"); });
+  $("pick-none").addEventListener("click", skip);
+
+  // ---------- DIALS ----------
+  function axisNorm(axis) {
+    var n = axisCount[axis] || 1;
+    var v = state.acc[axis] / n;           // -1..1
+    return Math.max(-1, Math.min(1, v));
+  }
+  function updateDials() {
+    document.querySelectorAll("#dials .dial").forEach(function (d) {
+      var axis = d.dataset.axis;
+      var v = axisNorm(axis);              // -1..1
+      var fill = d.querySelector(".fill");
+      // draw from center outward
+      var half = Math.abs(v) * 50;
+      if (v >= 0) { fill.style.left = "50%"; fill.style.width = half + "%"; }
+      else { fill.style.left = (50 - half) + "%"; fill.style.width = half + "%"; }
+    });
+  }
+
+  // ---------- SCORING ----------
+  function classify() {
+    var user = [axisNorm("temp"), axisNorm("value"), axisNorm("chroma")];
+    var best = null, bestD = Infinity;
+    SEASONS.forEach(function (s) {
+      var dt = user[0] - s.t[0], dv = user[1] - s.t[1], dc = user[2] - s.t[2];
+      var d = dt*dt + dv*dv + dc*dc;
+      if (d < bestD) { bestD = d; best = s; }
+    });
+    return best;
+  }
+
+  function whyText(s) {
+    var t = axisNorm("temp"), v = axisNorm("value"), c = axisNorm("chroma");
+    var parts = [];
+    parts.push(t >= 0 ? "warm" : "cool");
+    parts.push(v >= 0 ? "light" : "deep");
+    parts.push(c >= 0 ? "bright, clear" : "soft, muted");
+    // order by dominance (strongest characteristic first)
+    var ranked = [
+      { w: parts[0], m: Math.abs(t) },
+      { w: parts[1], m: Math.abs(v) },
+      { w: parts[2], m: Math.abs(c) }
+    ].sort(function (a, b) { return b.m - a.m; });
+    var lead = ranked[0].w, second = ranked[1].w;
+    return 'You glowed most in <b>' + lead + '</b> drapes, with <b>' + second +
+      '</b> close behind — and dimmed in their opposites. That signature is ' +
+      s.name + ": " + s.tag + ".";
+  }
+
+  // ---------- RESULT RENDER ----------
+  function finish() {
+    stopCamera();
+    var s = classify();
+
+    $("r-name").textContent = s.name;
+    $("r-tag").textContent = "“" + s.tag + "”";
+    $("r-why").innerHTML = whyText(s);
+
+    // palette wall
+    var wall = $("r-wall"); wall.innerHTML = "";
+    s.pal.forEach(function (hex, k) {
+      var el = document.createElement("div");
+      el.className = "sw";
+      el.style.background = hex;
+      el.style.animationDelay = (k * 55) + "ms";
+      el.innerHTML = '<span>' + hex.toUpperCase() + '</span>';
+      wall.appendChild(el);
+    });
+
+    // neutrals
+    var nu = $("r-neutrals"); nu.innerHTML = "";
+    var neutralNames = ["anchor","mid","light"];
+    s.neutrals.forEach(function (hex, k) {
+      nu.appendChild(chip(hex, neutralNames[k] || hex.toUpperCase()));
+    });
+
+    // avoid
+    var av = $("r-avoid"); av.innerHTML = "";
+    s.avoid.forEach(function (hex) { av.appendChild(chip(hex, hex.toUpperCase())); });
+
+    // result dials (horizontal readouts)
+    renderResultDials();
+
+    show("s-result");
+  }
+
+  function chip(hex, label) {
+    var c = document.createElement("span");
+    c.className = "chip";
+    c.innerHTML = '<i style="background:' + hex + '"></i>' + label;
+    return c;
+  }
+
+  function renderResultDials() {
+    var host = $("r-dials"); host.innerHTML = "";
+    var defs = [
+      { axis:"temp",   lo:"cool",  hi:"warm"  },
+      { axis:"value",  lo:"deep",  hi:"light" },
+      { axis:"chroma", lo:"soft",  hi:"bright"}
+    ];
+    defs.forEach(function (d) {
+      var v = axisNorm(d.axis);
+      var half = Math.abs(v) * 50;
+      var left = v >= 0 ? 50 : (50 - half);
+      var lead = v >= 0 ? d.hi : d.lo;
+      var el = document.createElement("div");
+      el.className = "dial";
+      el.style.minWidth = "0";
+      el.innerHTML =
+        '<div class="name">' + d.axis + ' — <b style="color:var(--accent)">' + lead + '</b></div>' +
+        '<div class="track"><div class="fill" style="left:' + left + '%;width:' + half + '%"></div></div>' +
+        '<div class="poles"><span>' + d.lo + '</span><span>' + d.hi + '</span></div>';
+      host.appendChild(el);
+    });
+  }
+
+  // ---------- COPY / RESTART ----------
+  $("copy").addEventListener("click", function () {
+    var s = classify();
+    var lines = [];
+    lines.push("MY SEASON — " + s.name + " (" + s.tag + ")");
+    lines.push("");
+    lines.push("Palette: " + s.pal.join("  "));
+    lines.push("Neutrals: " + s.neutrals.join("  "));
+    lines.push("Avoid: " + s.avoid.join("  "));
+    lines.push("");
+    lines.push("Draped at The Drape Room.");
+    var text = lines.join("\n");
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(function () { toast("Palette copied to clipboard"); },
+        function () { toast("Couldn't copy — select and copy manually"); });
+    } else { toast("Clipboard unavailable"); }
+  });
+
+  $("restart").addEventListener("click", function () {
+    state.i = 0; state.acc = { temp:0, value:0, chroma:0 };
+    updateDials();
+    show("s-intro");
+  });
+
+  // ---------- TOAST ----------
+  var toastTimer = null;
+  function toast(msg) {
+    var t = $("toast");
+    t.textContent = msg; t.classList.add("show");
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { t.classList.remove("show"); }, 2200);
+  }
+
+  updateDials();
+})();
+</script>
+
+</body>
+</html>
