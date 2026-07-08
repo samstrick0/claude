@@ -201,37 +201,29 @@
     border-radius: 18px;
     overflow: hidden;
     box-shadow: 0 30px 70px -34px var(--shadow), inset 0 0 0 1px var(--hair-2);
-    display: grid;
-    grid-template-columns: 1fr 1fr;
     background: var(--stage);
     isolation: isolate;
+    cursor: pointer;
   }
-  .drape {
-    position: relative;
-    border: none; cursor: pointer; padding: 0;
-    transition: transform 0.45s cubic-bezier(.2,.8,.2,1), filter 0.3s;
-    color: #fff;
+  /* one drape shown at a time — two stacked layers cross-fade as you toggle */
+  .drape-fill { position: absolute; inset: 0; z-index: 1; }
+  .drape-fill .layer {
+    position: absolute; inset: 0; opacity: 0;
+    transition: opacity 0.4s ease;
   }
-  .drape::after {
+  .drape-fill .layer.on { opacity: 1; }
+  .drape-fill .layer::after {
     content: ""; position: absolute; inset: 0;
-    box-shadow: inset 0 0 90px rgba(0,0,0,0.14);
+    box-shadow: inset 0 0 110px rgba(0,0,0,0.16);
   }
-  .drape .dlabel {
-    position: absolute; left: 0; right: 0; bottom: 0;
-    font-family: var(--mono); font-size: 0.68rem; letter-spacing: 0.16em;
-    text-transform: uppercase;
-    padding: 0.7rem; text-align: center;
-    background: linear-gradient(to top, rgba(0,0,0,0.42), transparent);
-    opacity: 0; transition: opacity 0.25s; z-index: 4;
+  .stage.chosen { animation: chosenPulse 0.55s ease; }
+  @keyframes chosenPulse {
+    0% { filter: brightness(1); }
+    35% { filter: brightness(1.14); }
+    100% { filter: brightness(1); }
   }
-  .drape:hover .dlabel, .drape:focus-visible .dlabel { opacity: 1; }
-  .drape.left  { border-radius: 18px 0 0 18px; }
-  .drape.right { border-radius: 0 18px 18px 0; }
-  .drape:hover { filter: brightness(1.04); z-index: 3; }
-  .drape.picked { z-index: 6; transform: scale(1.02); }
-  .drape.dimmed { filter: brightness(0.6) saturate(0.5); }
 
-  /* the mirror bust — sits over the seam so both drapes frame the face */
+  /* the mirror bust — sits centered so the single drape frames the face */
   .mirror {
     position: absolute; top: 0; bottom: 0; left: 50%;
     transform: translateX(-50%);
@@ -260,33 +252,56 @@
   }
   .silhouette { width: 74%; height: 92%; display: block; filter: drop-shadow(0 6px 18px rgba(0,0,0,0.22)); }
 
-  .stage.flash-l .drape.left::after,
-  .stage.flash-r .drape.right::after { box-shadow: inset 0 0 120px rgba(255,255,255,0.35); }
-
-  .vs {
+  /* a hint that the whole stage is tappable to flip the drape */
+  .flip-hint {
     position: absolute; top: 0.8rem; left: 50%; transform: translateX(-50%);
-    z-index: 7; font-family: var(--serif); font-style: italic;
-    font-size: 1rem; color: #fff; text-shadow: 0 1px 6px rgba(0,0,0,0.4);
-    background: rgba(0,0,0,0.18); backdrop-filter: blur(2px);
-    padding: 0.15rem 0.7rem; border-radius: 999px;
+    z-index: 7; font-family: var(--mono); font-size: 0.62rem; letter-spacing: 0.18em;
+    text-transform: uppercase; color: #fff;
+    text-shadow: 0 1px 6px rgba(0,0,0,0.45);
+    background: rgba(0,0,0,0.22); backdrop-filter: blur(2px);
+    padding: 0.3rem 0.7rem; border-radius: 999px;
+    pointer-events: none; opacity: 0.9;
   }
 
   /* controls under stage */
   .stage-controls {
-    display: flex; align-items: center; justify-content: center; gap: 1rem;
-    margin-top: 1.1rem; flex-wrap: wrap;
+    display: flex; flex-direction: column; align-items: center; gap: 0.9rem;
+    margin-top: 1.2rem;
   }
-  .pick-btn {
-    font-family: var(--sans); font-size: 0.92rem;
+
+  /* segmented toggle — flip between the two drapes to compare */
+  .toggle {
+    display: inline-flex; padding: 4px; gap: 4px;
+    background: var(--panel-2); border: 1px solid var(--hair);
+    border-radius: 999px;
+  }
+  .seg {
+    display: inline-flex; align-items: center; gap: 0.55rem;
+    border: none; background: none; cursor: pointer;
+    font-family: var(--sans); font-size: 0.88rem; color: var(--muted);
+    padding: 0.5rem 1.05rem; border-radius: 999px; transition: 0.18s;
+  }
+  .seg i {
+    width: 18px; height: 18px; border-radius: 50%;
+    box-shadow: inset 0 0 0 1px rgba(0,0,0,0.18);
+  }
+  .seg:hover { color: var(--ink); }
+  .seg[aria-pressed="true"] {
     background: var(--panel); color: var(--ink);
-    border: 1px solid var(--hair); border-radius: 999px;
-    padding: 0.6rem 1.3rem; cursor: pointer; transition: 0.18s;
+    box-shadow: 0 1px 5px -1px var(--shadow);
   }
-  .pick-btn:hover { border-color: var(--accent); transform: translateY(-1px); }
+
+  .pick-btn {
+    font-family: var(--sans); font-size: 0.95rem; font-weight: 600;
+    background: var(--accent); color: var(--accent-ink);
+    border: 1px solid var(--accent); border-radius: 999px;
+    padding: 0.7rem 1.6rem; cursor: pointer; transition: 0.18s;
+  }
+  .pick-btn:hover { filter: brightness(1.06); transform: translateY(-1px); }
   .ghost {
     background: none; border: none; color: var(--muted);
     font-family: var(--mono); font-size: 0.72rem; letter-spacing: 0.14em;
-    text-transform: uppercase; cursor: pointer; padding: 0.5rem 0.6rem;
+    text-transform: uppercase; cursor: pointer; padding: 0.4rem 0.6rem;
   }
   .ghost:hover { color: var(--ink); }
 
@@ -490,24 +505,25 @@
       <div class="drape-head">
         <p class="eyebrow" id="round-label">Temperature · drape 1 of 3</p>
         <h2 class="display q" id="round-q">Which drape lights up your face?</h2>
-        <p class="hint">Look at your skin, not the color. Pick where you look brightest and most awake.</p>
+        <p class="hint">Flip between the two drapes and watch your skin — choose the one where you look brightest and most awake.</p>
       </div>
 
-      <div class="stage" id="stage">
-        <button class="drape left" id="drape-l" type="button" aria-label="Choose left drape">
-          <span class="dlabel" id="dlabel-l">warm</span>
-        </button>
-        <button class="drape right" id="drape-r" type="button" aria-label="Choose right drape">
-          <span class="dlabel" id="dlabel-r">cool</span>
-        </button>
-        <div class="vs">or</div>
+      <div class="stage" id="stage" tabindex="0" role="button" aria-label="Tap to flip between the two drapes">
+        <div class="drape-fill">
+          <div class="layer" id="layer-l"></div>
+          <div class="layer" id="layer-r"></div>
+        </div>
+        <div class="flip-hint">tap to flip ⇄</div>
         <div class="mirror"><div class="bust" id="bust"></div></div>
       </div>
 
       <div class="stage-controls">
-        <button class="pick-btn" id="pick-l" type="button">This one ◂</button>
+        <div class="toggle" id="toggle" role="group" aria-label="Compare the two drapes">
+          <button class="seg" id="seg-l" data-side="l" type="button" aria-pressed="true"><i id="dot-l"></i><span id="name-l">warm</span></button>
+          <button class="seg" id="seg-r" data-side="r" type="button" aria-pressed="false"><i id="dot-r"></i><span id="name-r">cool</span></button>
+        </div>
+        <button class="pick-btn" id="choose" type="button">This one makes me glow ✓</button>
         <button class="ghost" id="pick-none" type="button">Can't tell — show another</button>
-        <button class="pick-btn" id="pick-r" type="button">▸ This one</button>
       </div>
 
       <div class="dials" id="dials">
@@ -937,6 +953,9 @@
     renderPair();
   });
 
+  // which drape is currently draped (shown); you toggle to compare
+  state.side = "l";
+
   function renderPair() {
     var p = PAIRS[state.i];
     var idxInAxis = PAIRS.slice(0, state.i + 1).filter(function (x) { return x.axis === p.axis; }).length;
@@ -949,20 +968,35 @@
     };
     $("round-q").textContent = qmap[p.axis];
 
-    var dl = $("drape-l"), dr = $("drape-r");
-    dl.style.background = p.l.hex; dr.style.background = p.r.hex;
-    dl.classList.remove("picked","dimmed"); dr.classList.remove("picked","dimmed");
-    $("dlabel-l").textContent = p.l.name;
-    $("dlabel-r").textContent = p.r.name;
+    // load both colors onto their layers and label the toggle segments
+    $("layer-l").style.background = p.l.hex;
+    $("layer-r").style.background = p.r.hex;
+    $("dot-l").style.background = p.l.hex;
+    $("dot-r").style.background = p.r.hex;
+    $("name-l").textContent = p.l.name;
+    $("name-r").textContent = p.r.name;
+
+    $("stage").classList.remove("chosen");
+    showSide("l");            // start each comparison on the first drape
     state.locked = false;
   }
+
+  // toggle the visible drape without committing a choice
+  function showSide(side) {
+    state.side = side;
+    $("layer-l").classList.toggle("on", side === "l");
+    $("layer-r").classList.toggle("on", side === "r");
+    $("seg-l").setAttribute("aria-pressed", side === "l" ? "true" : "false");
+    $("seg-r").setAttribute("aria-pressed", side === "r" ? "true" : "false");
+  }
+  function flip() { showSide(state.side === "l" ? "r" : "l"); }
 
   function choose(side) {
     if (state.locked) return;
     state.locked = true;
+    showSide(side);           // make sure the chosen drape is the one on screen
     var p = PAIRS[state.i];
-    var chosen = side === "l" ? p.l : p.r;
-    var pole = chosen.pole;
+    var pole = (side === "l" ? p.l : p.r).pole;
 
     // accumulate: + toward warm/light/bright, - toward cool/deep/soft
     if (pole === "warm")  state.acc.temp   += 1;
@@ -972,19 +1006,15 @@
     if (pole === "bright")state.acc.chroma += 1;
     if (pole === "soft")  state.acc.chroma -= 1;
 
-    // visual confirmation
     var stage = $("stage");
-    $("drape-" + side).classList.add("picked");
-    $("drape-" + (side === "l" ? "r" : "l")).classList.add("dimmed");
-    stage.classList.add(side === "l" ? "flash-l" : "flash-r");
+    stage.classList.add("chosen");   // brief glow pulse on the chosen drape
     updateDials();
 
     setTimeout(function () {
-      stage.classList.remove("flash-l", "flash-r");
       state.i++;
       if (state.i >= PAIRS.length) { finish(); }
       else { renderPair(); }
-    }, 620);
+    }, 560);
   }
 
   function skip() {
@@ -992,14 +1022,18 @@
     // no signal added — reshuffle by moving this pair to the end once
     var p = PAIRS.splice(state.i, 1)[0];
     PAIRS.push(p);
-    // guard against infinite skipping: if we've looped, just advance
     renderPair();
   }
 
-  $("drape-l").addEventListener("click", function () { choose("l"); });
-  $("drape-r").addEventListener("click", function () { choose("r"); });
-  $("pick-l").addEventListener("click", function () { choose("l"); });
-  $("pick-r").addEventListener("click", function () { choose("r"); });
+  $("stage").addEventListener("click", flip);
+  $("stage").addEventListener("keydown", function (e) {
+    if (e.key === "ArrowLeft") { e.preventDefault(); showSide("l"); }
+    else if (e.key === "ArrowRight") { e.preventDefault(); showSide("r"); }
+    else if (e.key === " " || e.key === "Enter") { e.preventDefault(); flip(); }
+  });
+  $("seg-l").addEventListener("click", function (e) { e.stopPropagation(); showSide("l"); });
+  $("seg-r").addEventListener("click", function (e) { e.stopPropagation(); showSide("r"); });
+  $("choose").addEventListener("click", function () { choose(state.side); });
   $("pick-none").addEventListener("click", skip);
 
   // ---------- DIALS ----------
