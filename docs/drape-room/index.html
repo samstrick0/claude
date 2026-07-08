@@ -503,7 +503,7 @@
         </div>
       </div>
 
-      <p class="footnote">Color analysis sorts you by three qualities of light — warm or cool, light or deep, bright or soft. Nine quick comparisons is all it takes.</p>
+      <p class="footnote">We read your skin the way an analyst does — draping color after color and watching for the one that makes you glow. Nine quick comparisons is all it takes.</p>
     </section>
 
     <!-- ========== SCREEN 2: DRAPING ========== -->
@@ -525,29 +525,11 @@
 
       <div class="stage-controls">
         <div class="toggle" id="toggle" role="group" aria-label="Compare the two drapes">
-          <button class="seg" id="seg-l" data-side="l" type="button" aria-pressed="true"><i id="dot-l"></i><span id="name-l">warm</span></button>
-          <button class="seg" id="seg-r" data-side="r" type="button" aria-pressed="false"><i id="dot-r"></i><span id="name-r">cool</span></button>
+          <button class="seg" id="seg-l" data-side="l" type="button" aria-pressed="true" aria-label="First drape"><i id="dot-l"></i></button>
+          <button class="seg" id="seg-r" data-side="r" type="button" aria-pressed="false" aria-label="Second drape"><i id="dot-r"></i></button>
         </div>
         <button class="pick-btn" id="choose" type="button">This one makes me glow ✓</button>
         <button class="ghost" id="pick-none" type="button">Can't tell — show another</button>
-      </div>
-
-      <div class="dials" id="dials">
-        <div class="dial" data-axis="temp">
-          <div class="name">Temperature</div>
-          <div class="track"><div class="fill"></div></div>
-          <div class="poles"><span>cool</span><span>warm</span></div>
-        </div>
-        <div class="dial" data-axis="value">
-          <div class="name">Value</div>
-          <div class="track"><div class="fill"></div></div>
-          <div class="poles"><span>deep</span><span>light</span></div>
-        </div>
-        <div class="dial" data-axis="chroma">
-          <div class="name">Chroma</div>
-          <div class="track"><div class="fill"></div></div>
-          <div class="poles"><span>soft</span><span>bright</span></div>
-        </div>
       </div>
     </section>
 
@@ -573,10 +555,6 @@
           </div>
         </div>
         <div style="display:flex;flex-direction:column;gap:1rem;">
-          <div class="card">
-            <h3>How you read on the dials</h3>
-            <div class="dials" id="r-dials" style="border:none;margin:0;padding:0;flex-direction:column;gap:1.1rem;max-width:none;"></div>
-          </div>
           <div class="card avoid">
             <h3>Colors that fight you</h3>
             <div class="chips" id="r-avoid"></div>
@@ -631,44 +609,75 @@
       '</svg>';
   }
 
-  // ---------- THE DRAPE PAIRS (each isolates one axis) ----------
-  // pole: warm/cool -> temperature ; light/deep -> value ; bright/soft -> chroma
-  var PAIRS = [
-    { axis:"temp", label:"Temperature",
-      l:{name:"warm coral",   hex:"#FF7A59", pole:"warm"},
-      r:{name:"cool orchid",  hex:"#E0558E", pole:"cool"} },
-    { axis:"temp", label:"Temperature",
-      l:{name:"warm ivory",   hex:"#F1E4C0", pole:"warm"},
-      r:{name:"cool snow",    hex:"#EDF2F5", pole:"cool"} },
-    { axis:"temp", label:"Temperature",
-      l:{name:"amber gold",   hex:"#D9A32B", pole:"warm"},
-      r:{name:"sapphire",     hex:"#2E5AC0", pole:"cool"} },
+  // ---------- THE DRAPE POOLS ----------
+  // Each entry is a matched pair that isolates one axis. a/b are just the two
+  // options; their pole carries the meaning, so we can randomize which side
+  // each lands on. A fresh, shuffled subset is drawn every session so the
+  // colors — and the order — never repeat predictably.
+  // pole: warm/cool (temperature) · light/deep (value) · bright/soft (chroma)
+  var POOLS = {
+    temp: [
+      { a:{hex:"#FF7A59", pole:"warm"}, b:{hex:"#E0558E", pole:"cool"} },
+      { a:{hex:"#F1E4C0", pole:"warm"}, b:{hex:"#EDF2F5", pole:"cool"} },
+      { a:{hex:"#D9A32B", pole:"warm"}, b:{hex:"#2E5AC0", pole:"cool"} },
+      { a:{hex:"#E8613C", pole:"warm"}, b:{hex:"#D5397A", pole:"cool"} },
+      { a:{hex:"#9C8A3E", pole:"warm"}, b:{hex:"#5E6FB0", pole:"cool"} },
+      { a:{hex:"#F2B27A", pole:"warm"}, b:{hex:"#E79BB8", pole:"cool"} },
+      { a:{hex:"#1FA88C", pole:"warm"}, b:{hex:"#67C6D6", pole:"cool"} },
+      { a:{hex:"#F2C230", pole:"warm"}, b:{hex:"#B9D24A", pole:"cool"} }
+    ],
+    value: [
+      { a:{hex:"#F5C9CE", pole:"light"}, b:{hex:"#4E2440", pole:"deep"} },
+      { a:{hex:"#F6E6A2", pole:"light"}, b:{hex:"#5E4420", pole:"deep"} },
+      { a:{hex:"#BCD8EC", pole:"light"}, b:{hex:"#22314F", pole:"deep"} },
+      { a:{hex:"#C7E8CE", pole:"light"}, b:{hex:"#274A32", pole:"deep"} },
+      { a:{hex:"#FAD9B8", pole:"light"}, b:{hex:"#4A2E1C", pole:"deep"} },
+      { a:{hex:"#DBC9E8", pole:"light"}, b:{hex:"#3E2247", pole:"deep"} },
+      { a:{hex:"#EAD3D9", pole:"light"}, b:{hex:"#3A2530", pole:"deep"} }
+    ],
+    chroma: [
+      { a:{hex:"#10B9CC", pole:"bright"}, b:{hex:"#6E9A96", pole:"soft"} },
+      { a:{hex:"#E23A2E", pole:"bright"}, b:{hex:"#B06A5E", pole:"soft"} },
+      { a:{hex:"#8A3FE0", pole:"bright"}, b:{hex:"#9C8AA8", pole:"soft"} },
+      { a:{hex:"#12B36A", pole:"bright"}, b:{hex:"#7E9A7C", pole:"soft"} },
+      { a:{hex:"#2A6BE0", pole:"bright"}, b:{hex:"#6E86A6", pole:"soft"} },
+      { a:{hex:"#E23A9A", pole:"bright"}, b:{hex:"#C088A0", pole:"soft"} },
+      { a:{hex:"#FBB021", pole:"bright"}, b:{hex:"#C6A46A", pole:"soft"} }
+    ]
+  };
+  var PER_AXIS = 3;                       // drapes drawn per axis each session
 
-    { axis:"value", label:"Value",
-      l:{name:"blush light",  hex:"#F5C9CE", pole:"light"},
-      r:{name:"deep plum",    hex:"#4E2440", pole:"deep"} },
-    { axis:"value", label:"Value",
-      l:{name:"butter light", hex:"#F6E6A2", pole:"light"},
-      r:{name:"deep bronze",  hex:"#5E4420", pole:"deep"} },
+  function shuffle(arr) {
+    for (var i = arr.length - 1; i > 0; i--) {
+      var j = Math.floor(Math.random() * (i + 1));
+      var t = arr[i]; arr[i] = arr[j]; arr[j] = t;
+    }
+    return arr;
+  }
 
-    { axis:"chroma", label:"Chroma",
-      l:{name:"clear turquoise", hex:"#10B9CC", pole:"bright"},
-      r:{name:"dusty teal",      hex:"#6E9A96", pole:"soft"} },
-    { axis:"chroma", label:"Chroma",
-      l:{name:"clear scarlet",   hex:"#E23A2E", pole:"bright"},
-      r:{name:"soft brick",      hex:"#B06A5E", pole:"soft"} },
-    { axis:"chroma", label:"Chroma",
-      l:{name:"clear orchid",    hex:"#8A3FE0", pole:"bright"},
-      r:{name:"soft mauve",      hex:"#9C8AA8", pole:"soft"} }
-  ];
-  var axisCount = { temp:0, value:0, chroma:0 };
-  PAIRS.forEach(function(p){ axisCount[p.axis]++; });
+  // build a fresh, shuffled session: random subset per axis, random sides,
+  // interleaved order so no axis or side is ever predictable
+  var PAIRS = [], axisCount = { temp:0, value:0, chroma:0 };
+  function buildSession() {
+    PAIRS = [];
+    ["temp", "value", "chroma"].forEach(function (ax) {
+      shuffle(POOLS[ax].slice()).slice(0, PER_AXIS).forEach(function (e) {
+        var flip = Math.random() < 0.5;
+        var l = flip ? e.b : e.a, r = flip ? e.a : e.b;
+        PAIRS.push({ axis: ax, l: { hex:l.hex, pole:l.pole }, r: { hex:r.hex, pole:r.pole } });
+      });
+    });
+    shuffle(PAIRS);
+    axisCount = { temp:0, value:0, chroma:0 };
+    PAIRS.forEach(function (p) { axisCount[p.axis]++; });
+  }
+  buildSession();
 
   // ---------- THE 12 SEASONS ----------
   // target coords on 3 axes: warmCool(-cool..+warm), lightDeep(-deep..+light), brightSoft(-soft..+bright)
   function C(n){ return {name:n.name, hex:n.hex}; }
   var SEASONS = [
-    { key:"bright-spring", name:"Bright Spring", tag:"clear, sunlit, electric warmth",
+    { key:"bright-spring", name:"Bright Spring", tag:"clear, sunlit, high-voltage",
       t:[0.5,0.3,0.9], power:{name:"bright coral",hex:"#FF6F52"},
       pal:["#FF6F52","#16C7C9","#FFC223","#4CC13B","#FF4D8D","#6E7BFF","#FF9E1B","#20D3B0"],
       neutrals:["#26324D","#B79B7E","#FBF3E2"], avoid:["#6E6247","#9C8AA8","#101114"] },
@@ -676,46 +685,46 @@
       t:[0.9,0.4,0.6], power:{name:"warm coral",hex:"#FF7A4D"},
       pal:["#FF7A4D","#18BFA5","#FFCB2E","#7DBE3C","#FF8FA3","#3FD0C9","#E8A02B","#B7D23A"],
       neutrals:["#6B4A2B","#C79A5B","#F6ECD2"], avoid:["#0E0F12","#8894A6","#8A6B8C"] },
-    { key:"light-spring", name:"Light Spring", tag:"delicate, warm, luminous",
+    { key:"light-spring", name:"Light Spring", tag:"delicate, gilded, luminous",
       t:[0.4,0.9,0.5], power:{name:"warm peach",hex:"#FFB79A"},
       pal:["#FFC7A8","#B8EAC6","#FBE7A1","#FFA797","#9FE3DA","#A9B4F2","#F6C9D6","#CDE79A"],
       neutrals:["#DAD2C4","#D9BE95","#FBF6EC"], avoid:["#101114","#6E1330","#3E5E2E"] },
 
-    { key:"light-summer", name:"Light Summer", tag:"soft, cool, watercolor",
+    { key:"light-summer", name:"Light Summer", tag:"hazy, powdery, watercolor",
       t:[-0.4,0.9,-0.3], power:{name:"cool periwinkle",hex:"#9FB0E6"},
       pal:["#A9C9E8","#F3C0D0","#C9BEE6","#BFE5D6","#9FB0E6","#D785A6","#BFD9E8","#D9C7E6"],
       neutrals:["#CFD3DA","#D9C3BE","#F3F5F8"], avoid:["#C05A2B","#5A5A22","#0E0F12"] },
-    { key:"true-summer", name:"True Summer", tag:"cool, gentle, dusk-blue",
+    { key:"true-summer", name:"True Summer", tag:"gentle, misty, dusk-blue",
       t:[-0.7,0.2,-0.6], power:{name:"soft fuchsia",hex:"#C25E93"},
       pal:["#5C86C4","#C25E93","#4C8C86","#7C8CD8","#9C6E97","#B23A6B","#6EA2C4","#A98ABE"],
       neutrals:["#8894A6","#6C5B5B","#EEF1F4"], avoid:["#E08A2B","#FFCB2E","#0E0F12"] },
-    { key:"soft-summer", name:"Soft Summer", tag:"muted, cool, smoke",
+    { key:"soft-summer", name:"Soft Summer", tag:"smoky, dusky, understated",
       t:[-0.4,-0.1,-0.9], power:{name:"mauve rose",hex:"#C0899A"},
       pal:["#7E96AE","#C0899A","#8FA394","#8A6B8C","#6E9A96","#C2A3A6","#93A8B0","#A98CA0"],
       neutrals:["#7C8288","#A69A8E","#E9E6E2"], avoid:["#E51022","#FF6F52","#101114"] },
 
-    { key:"soft-autumn", name:"Soft Autumn", tag:"muted, warm, honeyed",
+    { key:"soft-autumn", name:"Soft Autumn", tag:"hazy, honeyed, gilded",
       t:[0.4,-0.2,-0.9], power:{name:"dusty salmon",hex:"#E29179"},
       pal:["#E29179","#9EA36A","#5E9A94","#B98A82","#C9A45C","#D89A82","#88996A","#C08E6E"],
       neutrals:["#A8927A","#6E6247","#E8E0D0"], avoid:["#1E4FD8","#E81E80","#0E0F12"] },
-    { key:"true-autumn", name:"True Autumn", tag:"rich, warm, harvest",
+    { key:"true-autumn", name:"True Autumn", tag:"rich, spiced, harvest",
       t:[0.9,-0.4,-0.6], power:{name:"burnt rust",hex:"#C05A2B"},
       pal:["#C05A2B","#6F7A2E","#1E7A6E","#E08A2B","#D0A028","#A83E2B","#3E5E2E","#B87333"],
       neutrals:["#4E3620","#B98A4B","#F1E4C6"], avoid:["#D785A6","#A9C9E8","#F3F5F8"] },
-    { key:"deep-autumn", name:"Deep Autumn", tag:"deep, warm, smoldering",
+    { key:"deep-autumn", name:"Deep Autumn", tag:"smoldering, molten, umbered",
       t:[0.5,-0.9,-0.3], power:{name:"deep rust",hex:"#9A3B22"},
       pal:["#9A3B22","#23492E","#7A3B2E","#0E5A5A","#B8862B","#C0392B","#5A5A22","#7A2E3A"],
       neutrals:["#2E2018","#8A5E33","#EDE0C4"], avoid:["#BFE5D6","#F3C0D0","#A9C9E8"] },
 
-    { key:"deep-winter", name:"Deep Winter", tag:"deep, cool, midnight",
+    { key:"deep-winter", name:"Deep Winter", tag:"inky, jewel-lit, midnight",
       t:[-0.5,-0.9,0.3], power:{name:"deep fuchsia",hex:"#A81E5C"},
       pal:["#12433B","#A81E5C","#1F3A8A","#6E1330","#0E5C3E","#3A1E5E","#C01326","#153A6E"],
       neutrals:["#101114","#2A2C30","#F2F4F6"], avoid:["#E29179","#C9A45C","#E8E0D0"] },
-    { key:"true-winter", name:"True Winter", tag:"clear, cool, icy",
+    { key:"true-winter", name:"True Winter", tag:"crisp, glacial, high-contrast",
       t:[-0.8,-0.3,0.6], power:{name:"true red",hex:"#E01020"},
       pal:["#D01A7A","#1E4FD8","#0E8A5F","#E01020","#BFE0EF","#5A2AAE","#0E8AC4","#8A1EC4"],
       neutrals:["#0E0F12","#6B7280","#FCFDFF"], avoid:["#E08A2B","#C9A45C","#9EA36A"] },
-    { key:"bright-winter", name:"Bright Winter", tag:"bright, cool, high-voltage",
+    { key:"bright-winter", name:"Bright Winter", tag:"electric, glacial, high-charge",
       t:[-0.4,-0.2,0.9], power:{name:"electric magenta",hex:"#E81E80"},
       pal:["#1E6BFF","#E81E80","#00A86B","#E51022","#F2F0A0","#6A1EE0","#10C4E0","#00D0A0"],
       neutrals:["#0D0E11","#7A8290","#FFFFFF"], avoid:["#9EA36A","#B98A82","#E8E0D0"] }
@@ -953,6 +962,7 @@
   }
 
   $("begin").addEventListener("click", function () {
+    buildSession();           // fresh, shuffled drapes every time
     state.i = 0; state.acc = { temp:0, value:0, chroma:0 };
     renderBust();
     show("s-drape");
@@ -964,23 +974,14 @@
 
   function renderPair() {
     var p = PAIRS[state.i];
-    var idxInAxis = PAIRS.slice(0, state.i + 1).filter(function (x) { return x.axis === p.axis; }).length;
-    $("round-label").textContent = p.label + " · drape " + idxInAxis + " of " + axisCount[p.axis];
+    // neutral progress only — nothing that reveals what each drape is testing
+    $("round-label").textContent = "Drape " + (state.i + 1) + " of " + PAIRS.length;
 
-    var qmap = {
-      temp:  "Warm or cool — which clears your skin?",
-      value: "Light or deep — which brings you forward?",
-      chroma:"Bright or soft — which sharpens your features?"
-    };
-    $("round-q").textContent = qmap[p.axis];
-
-    // load both colors onto their layers and label the toggle segments
+    // load both colors onto their layers and swatch dots (no names)
     $("layer-l").style.background = p.l.hex;
     $("layer-r").style.background = p.r.hex;
     $("dot-l").style.background = p.l.hex;
     $("dot-r").style.background = p.r.hex;
-    $("name-l").textContent = p.l.name;
-    $("name-r").textContent = p.r.name;
 
     $("stage").classList.remove("chosen");
     showSide("l");            // start each comparison on the first drape
@@ -1014,7 +1015,6 @@
 
     var stage = $("stage");
     stage.classList.add("chosen");   // brief glow pulse on the chosen drape
-    updateDials();
 
     setTimeout(function () {
       state.i++;
@@ -1042,25 +1042,12 @@
   $("choose").addEventListener("click", function () { choose(state.side); });
   $("pick-none").addEventListener("click", skip);
 
-  // ---------- DIALS ----------
+  // ---------- SCORING (internal — never surfaced as warm/cool etc.) ----------
   function axisNorm(axis) {
     var n = axisCount[axis] || 1;
     var v = state.acc[axis] / n;           // -1..1
     return Math.max(-1, Math.min(1, v));
   }
-  function updateDials() {
-    document.querySelectorAll("#dials .dial").forEach(function (d) {
-      var axis = d.dataset.axis;
-      var v = axisNorm(axis);              // -1..1
-      var fill = d.querySelector(".fill");
-      // draw from center outward
-      var half = Math.abs(v) * 50;
-      if (v >= 0) { fill.style.left = "50%"; fill.style.width = half + "%"; }
-      else { fill.style.left = (50 - half) + "%"; fill.style.width = half + "%"; }
-    });
-  }
-
-  // ---------- SCORING ----------
   function classify() {
     var user = [axisNorm("temp"), axisNorm("value"), axisNorm("chroma")];
     var best = null, bestD = Infinity;
@@ -1073,21 +1060,10 @@
   }
 
   function whyText(s) {
-    var t = axisNorm("temp"), v = axisNorm("value"), c = axisNorm("chroma");
-    var parts = [];
-    parts.push(t >= 0 ? "warm" : "cool");
-    parts.push(v >= 0 ? "light" : "deep");
-    parts.push(c >= 0 ? "bright, clear" : "soft, muted");
-    // order by dominance (strongest characteristic first)
-    var ranked = [
-      { w: parts[0], m: Math.abs(t) },
-      { w: parts[1], m: Math.abs(v) },
-      { w: parts[2], m: Math.abs(c) }
-    ].sort(function (a, b) { return b.m - a.m; });
-    var lead = ranked[0].w, second = ranked[1].w;
-    return 'You glowed most in <b>' + lead + '</b> drapes, with <b>' + second +
-      '</b> close behind — and dimmed in their opposites. That signature is ' +
-      s.name + ": " + s.tag + ".";
+    // describe the read without exposing the underlying axes
+    return 'Drape after drape, your skin lifted toward the <b>' + s.name +
+      '</b> family and went flat in its opposites. These are the colors that ' +
+      'make you glow — ' + s.tag + '.';
   }
 
   // ---------- RESULT RENDER ----------
@@ -1112,17 +1088,11 @@
 
     // neutrals
     var nu = $("r-neutrals"); nu.innerHTML = "";
-    var neutralNames = ["anchor","mid","light"];
-    s.neutrals.forEach(function (hex, k) {
-      nu.appendChild(chip(hex, neutralNames[k] || hex.toUpperCase()));
-    });
+    s.neutrals.forEach(function (hex) { nu.appendChild(chip(hex, hex.toUpperCase())); });
 
     // avoid
     var av = $("r-avoid"); av.innerHTML = "";
     s.avoid.forEach(function (hex) { av.appendChild(chip(hex, hex.toUpperCase())); });
-
-    // result dials (horizontal readouts)
-    renderResultDials();
 
     show("s-result");
   }
@@ -1132,29 +1102,6 @@
     c.className = "chip";
     c.innerHTML = '<i style="background:' + hex + '"></i>' + label;
     return c;
-  }
-
-  function renderResultDials() {
-    var host = $("r-dials"); host.innerHTML = "";
-    var defs = [
-      { axis:"temp",   lo:"cool",  hi:"warm"  },
-      { axis:"value",  lo:"deep",  hi:"light" },
-      { axis:"chroma", lo:"soft",  hi:"bright"}
-    ];
-    defs.forEach(function (d) {
-      var v = axisNorm(d.axis);
-      var half = Math.abs(v) * 50;
-      var left = v >= 0 ? 50 : (50 - half);
-      var lead = v >= 0 ? d.hi : d.lo;
-      var el = document.createElement("div");
-      el.className = "dial";
-      el.style.minWidth = "0";
-      el.innerHTML =
-        '<div class="name">' + d.axis + ' — <b style="color:var(--accent)">' + lead + '</b></div>' +
-        '<div class="track"><div class="fill" style="left:' + left + '%;width:' + half + '%"></div></div>' +
-        '<div class="poles"><span>' + d.lo + '</span><span>' + d.hi + '</span></div>';
-      host.appendChild(el);
-    });
   }
 
   // ---------- COPY / RESTART ----------
@@ -1177,7 +1124,6 @@
 
   $("restart").addEventListener("click", function () {
     state.i = 0; state.acc = { temp:0, value:0, chroma:0 };
-    updateDials();
     show("s-intro");
   });
 
@@ -1189,8 +1135,6 @@
     clearTimeout(toastTimer);
     toastTimer = setTimeout(function () { t.classList.remove("show"); }, 2200);
   }
-
-  updateDials();
 })();
 </script>
 
