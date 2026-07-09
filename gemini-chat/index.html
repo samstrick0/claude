@@ -30,8 +30,16 @@ body {
   color: var(--text);
   display: flex;
   flex-direction: column;
-  height: 100vh;
+  /* Pinned to the visual viewport (see JS): position:fixed so the document
+     itself can never scroll — that's what let the header slide under the
+     notch when the keyboard opened. Height is kept in sync with the
+     on-screen area so the app shrinks to sit above the keyboard. */
+  position: fixed;
+  top: 0; left: 0;
+  width: 100%;
+  height: 100dvh;            /* fallback before JS runs / non-iOS */
   overflow: hidden;
+  overscroll-behavior: none;
 }
 
 /* ── Header ───────────────────────────────────────────────────── */
@@ -341,6 +349,23 @@ let pending = [];          // attachments staged in composer: {mime, data(base64
 const $ = s => document.querySelector(s);
 const log = $('#log'), empty = $('#empty'), promptEl = $('#prompt');
 const attachmentsEl = $('#attachments'), sendBtn = $('#sendBtn');
+
+/* ── Keep the app locked to the visible area (iOS keyboard/notch) ──
+   The body is position:fixed, so the document can't scroll and the header
+   stays put. We resize it to the visual viewport so, when the keyboard
+   opens, the whole app shrinks to fit above it instead of the page
+   scrolling the header off the top. */
+(function pinToViewport(){
+  const vv = window.visualViewport;
+  if(!vv) return;
+  const fit = () => {
+    document.body.style.height = vv.height + 'px';
+    document.body.style.top = vv.offsetTop + 'px';
+  };
+  vv.addEventListener('resize', fit);
+  vv.addEventListener('scroll', fit);
+  fit();
+})();
 
 /* ── API key ──────────────────────────────────────────────────── */
 function getKey(){ return localStorage.getItem(KEY_STORE) || ''; }
