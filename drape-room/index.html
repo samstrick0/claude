@@ -41,6 +41,8 @@
     --shadow:    rgba(40,38,30,0.16);
     --stage:     #C9C6BE;   /* the neutral drape-room grey card */
     --glow:      rgba(169,130,76,0.0);
+    --good:      #1F7A45;   /* semantic: a glow / fits */
+    --bad:       #9A2B2B;   /* semantic: clashes */
 
     --serif: Georgia, "Times New Roman", "Iowan Old Style", serif;
     --sans: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
@@ -64,17 +66,21 @@
       --accent-ink:#1C1608;
       --shadow:  rgba(0,0,0,0.5);
       --stage:   #2A2C2E;
+      --good:    #6FDD9B;
+      --bad:     #F2908F;
     }
   }
   :root[data-theme="light"] {
     --bg:#E9E7E1; --bg-2:#E1DED7; --panel:#F3F1EC; --panel-2:#ECE9E3;
     --ink:#26251F; --muted:#6C6A61; --hair:#CFCBC1; --hair-2:#D8D4CA;
     --accent:#A9824C; --accent-ink:#3C2E17; --shadow:rgba(40,38,30,0.16); --stage:#C9C6BE;
+    --good:#1F7A45; --bad:#9A2B2B;
   }
   :root[data-theme="dark"] {
     --bg:#17181A; --bg-2:#131416; --panel:#202224; --panel-2:#191B1D;
     --ink:#EAE8E2; --muted:#98958C; --hair:#2F3235; --hair-2:#26292B;
     --accent:#C6A063; --accent-ink:#1C1608; --shadow:rgba(0,0,0,0.5); --stage:#2A2C2E;
+    --good:#6FDD9B; --bad:#F2908F;
   }
 
   * { box-sizing: border-box; }
@@ -402,6 +408,60 @@
 
   .footnote { text-align: center; color: var(--muted); font-size: 0.78rem; margin-top: 3rem; max-width: 62ch; margin-left: auto; margin-right: auto; }
 
+  /* ---------- color lab ---------- */
+  .lab-top { display:flex; align-items:flex-end; justify-content:space-between; gap:1rem; flex-wrap:wrap; margin-bottom:1.4rem; }
+  .lab-season { display:flex; align-items:center; gap:0.55rem; font-family:var(--mono); font-size:0.66rem; letter-spacing:0.16em; text-transform:uppercase; color:var(--muted); }
+  .lab-season select {
+    font-family:var(--sans); font-size:0.9rem; text-transform:none; letter-spacing:0;
+    color:var(--ink); background:var(--panel); border:1px solid var(--hair);
+    border-radius:999px; padding:0.45rem 0.9rem; cursor:pointer;
+  }
+  .lab-tabs { display:inline-flex; padding:4px; gap:4px; background:var(--panel-2); border:1px solid var(--hair); border-radius:999px; margin-bottom:1.4rem; flex-wrap:wrap; }
+  .lab-tab { border:none; background:none; cursor:pointer; font-family:var(--sans); font-size:0.88rem; color:var(--muted); padding:0.5rem 1.05rem; border-radius:999px; transition:0.18s; }
+  .lab-tab:hover { color:var(--ink); }
+  .lab-tab[aria-selected="true"] { background:var(--panel); color:var(--ink); box-shadow:0 1px 5px -1px var(--shadow); }
+  .lab-panel { display:none; }
+  .lab-panel.on { display:block; animation:fade 0.35s ease both; }
+
+  .lab-card { background:var(--panel); border:1px solid var(--hair); border-radius:14px; padding:clamp(1.1rem,3vw,1.6rem); }
+  .lab-card + .lab-card { margin-top:1rem; }
+  .lab-h { font-family:var(--mono); font-size:0.7rem; letter-spacing:0.2em; text-transform:uppercase; color:var(--muted); margin:0 0 1rem; }
+
+  /* reusable color control: picker + hex + HSL fields */
+  .cc { display:flex; align-items:center; gap:0.7rem; flex-wrap:wrap; }
+  .cc-pick { width:52px; height:52px; padding:0; border:1px solid var(--hair); border-radius:12px; background:none; cursor:pointer; }
+  .cc-pick::-webkit-color-swatch { border:none; border-radius:10px; }
+  .cc-pick::-webkit-color-swatch-wrapper { padding:3px; }
+  .cc-pick::-moz-color-swatch { border:none; border-radius:10px; }
+  .cc-hex { width:96px; font-family:var(--mono); font-size:0.9rem; text-transform:uppercase; padding:0.5rem 0.6rem; border:1px solid var(--hair); border-radius:10px; background:var(--panel-2); color:var(--ink); }
+  .cc-hsl { display:flex; gap:0.45rem; }
+  .cc-hsl label { display:flex; flex-direction:column; align-items:center; font-family:var(--mono); font-size:0.56rem; letter-spacing:0.12em; color:var(--muted); gap:0.25rem; }
+  .cc-hsl input { width:52px; font-family:var(--mono); font-size:0.82rem; text-align:center; padding:0.35rem 0.3rem; border:1px solid var(--hair); border-radius:8px; background:var(--panel-2); color:var(--ink); }
+
+  .mini-pal { display:flex; gap:5px; margin-top:0.5rem; flex-wrap:wrap; }
+  .mini-pal i { width:28px; height:28px; border-radius:7px; box-shadow:inset 0 0 0 1px rgba(0,0,0,0.12); }
+
+  .verdict { display:inline-flex; align-items:center; gap:0.5rem; padding:0.45rem 0.95rem; border-radius:999px; font-size:0.9rem; font-weight:600; }
+  .verdict.glow  { background:color-mix(in srgb, var(--good) 20%, transparent); color:var(--good); }
+  .verdict.ok    { background:color-mix(in srgb, var(--accent) 20%, transparent); color:var(--accent); }
+  .verdict.clash { background:color-mix(in srgb, var(--bad) 20%, transparent); color:var(--bad); }
+
+  .shift-row { display:flex; align-items:center; gap:1rem; flex-wrap:wrap; }
+  .shift-sw { width:92px; height:118px; border-radius:12px; box-shadow:inset 0 0 0 1px rgba(0,0,0,0.14); position:relative; overflow:hidden; }
+  .shift-sw span { position:absolute; left:0; right:0; bottom:0; font-family:var(--mono); font-size:0.6rem; text-align:center; padding:0.35rem; color:#fff; background:linear-gradient(to top, rgba(0,0,0,0.42), transparent); }
+  .shift-arrow { font-size:1.4rem; color:var(--muted); }
+  .shift-deltas { display:flex; gap:1.1rem; margin-top:1.1rem; font-family:var(--mono); font-size:0.82rem; color:var(--muted); }
+  .shift-deltas b { color:var(--accent); font-variant-numeric:tabular-nums; }
+
+  .mix-inputs { display:flex; gap:1.4rem; flex-wrap:wrap; }
+  .mix-well { display:flex; flex-direction:column; gap:0.5rem; }
+  .mix-well .cc-tag { font-family:var(--mono); font-size:0.66rem; letter-spacing:0.2em; color:var(--muted); }
+  .mix-ratio { display:flex; align-items:center; gap:0.8rem; margin:1.3rem 0; }
+  .mix-ratio input[type="range"] { flex:1; accent-color:var(--accent); }
+  .mix-ratio .zlabel { font-family:var(--mono); font-size:0.66rem; letter-spacing:0.16em; text-transform:uppercase; color:var(--muted); }
+  .mix-out { display:flex; align-items:center; gap:1.1rem; flex-wrap:wrap; }
+  .mix-swatch { width:120px; height:82px; border-radius:12px; box-shadow:inset 0 0 0 1px rgba(0,0,0,0.14); }
+
   /* ---------- oval cropper ---------- */
   .cropper {
     position: fixed; inset: 0; z-index: 60;
@@ -494,6 +554,7 @@
 
           <div class="actions" style="justify-content:flex-start;margin-top:1.8rem;">
             <button class="btn primary" id="begin" type="button">Enter the drape room →</button>
+            <button class="btn" id="open-lab-intro" type="button">Open the Color Lab</button>
           </div>
         </div>
 
@@ -563,11 +624,93 @@
       </div>
 
       <div class="actions">
-        <button class="btn primary" id="copy" type="button">Copy my palette</button>
+        <button class="btn primary" id="open-lab-result" type="button">Open the Color Lab →</button>
+        <button class="btn" id="copy" type="button">Copy my palette</button>
         <button class="btn" id="restart" type="button">Drape again</button>
       </div>
 
       <p class="footnote">A screen can only get you close — light, camera, and calibration all shift color. Treat this as a confident starting point, then confirm the winners against your face in daylight.</p>
+    </section>
+
+    <!-- ========== SCREEN: COLOR LAB ========== -->
+    <section class="screen" id="s-lab">
+      <div class="lab-top">
+        <div>
+          <p class="eyebrow">Color Lab</p>
+          <h2 class="display" style="font-size:clamp(1.7rem,5vw,2.6rem);margin:0.2rem 0 0;">Try any color against a season</h2>
+        </div>
+        <div class="lab-season">
+          tuning to
+          <select id="lab-season" aria-label="Season to tune to"></select>
+        </div>
+      </div>
+
+      <div class="lab-tabs" role="tablist" aria-label="Color Lab tools">
+        <button class="lab-tab" data-tab="lab-classify" role="tab" aria-selected="true" type="button">Find its season</button>
+        <button class="lab-tab" data-tab="lab-shift" role="tab" aria-selected="false" type="button">Shift to fit</button>
+        <button class="lab-tab" data-tab="lab-mix" role="tab" aria-selected="false" type="button">Mixing bench</button>
+      </div>
+
+      <!-- Tool 1: classify -->
+      <div class="lab-panel on" id="lab-classify" role="tabpanel">
+        <div class="lab-card">
+          <p class="lab-h">Pick a color</p>
+          <div class="cc" id="lab1-control"></div>
+        </div>
+        <div class="lab-card">
+          <p class="lab-h">Where it lands</p>
+          <p style="margin:0 0 0.3rem;">Belongs to <b class="display" id="lab1-name" style="font-size:1.3rem;">—</b></p>
+          <div class="mini-pal" id="lab1-pal"></div>
+          <div style="margin-top:1.1rem;"><span class="verdict ok" id="lab1-verdict">—</span></div>
+        </div>
+      </div>
+
+      <!-- Tool 2: shift -->
+      <div class="lab-panel" id="lab-shift" role="tabpanel">
+        <div class="lab-card">
+          <p class="lab-h">Pick a color to tune</p>
+          <div class="cc" id="lab2-control"></div>
+        </div>
+        <div class="lab-card">
+          <p class="lab-h" id="lab2-tuned">tuned to —</p>
+          <div class="shift-row">
+            <div class="shift-sw" id="lab2-from"><span id="lab2-from-hex">—</span></div>
+            <div class="shift-arrow" aria-hidden="true">→</div>
+            <div class="shift-sw" id="lab2-to"><span id="lab2-to-hex">—</span></div>
+          </div>
+          <div class="shift-deltas" id="lab2-deltas"></div>
+        </div>
+      </div>
+
+      <!-- Tool 3: mixing bench -->
+      <div class="lab-panel" id="lab-mix" role="tabpanel">
+        <div class="lab-card">
+          <p class="lab-h">Mix two colors</p>
+          <div class="mix-inputs">
+            <div class="mix-well"><span class="cc-tag">Color A</span><div class="cc" id="lab3-a"></div></div>
+            <div class="mix-well"><span class="cc-tag">Color B</span><div class="cc" id="lab3-b"></div></div>
+          </div>
+          <div class="mix-ratio">
+            <span class="zlabel">A</span>
+            <input type="range" id="lab3-ratio" min="0" max="100" value="50" aria-label="Mix ratio">
+            <span class="zlabel">B</span>
+          </div>
+          <div class="mix-out">
+            <div class="mix-swatch" id="lab3-out"></div>
+            <div>
+              <p style="margin:0;font-family:var(--mono);font-size:0.8rem;color:var(--muted);" id="lab3-out-hex">—</p>
+              <p style="margin:0.25rem 0 0.5rem;">Lands in <b id="lab3-season">—</b></p>
+              <div class="mini-pal" id="lab3-pal"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="actions" style="justify-content:flex-start;">
+        <button class="btn" id="lab-back" type="button">← Back</button>
+      </div>
+
+      <p class="footnote">A close, wearable guide, not a verdict — screens and lighting shift color, so trust your eye in daylight for the final call.</p>
     </section>
 
   </div>
@@ -1070,6 +1213,7 @@
   function finish() {
     stopCamera();
     var s = classify();
+    state.lastSeasonKey = s.key;      // remember for the Color Lab
 
     $("r-name").textContent = s.name;
     $("r-tag").textContent = "“" + s.tag + "”";
@@ -1126,6 +1270,225 @@
     state.i = 0; state.acc = { temp:0, value:0, chroma:0 };
     show("s-intro");
   });
+
+  // ---------- COLOR LAB ----------
+  function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
+  function hexToRgb(hex) {
+    hex = hex.replace("#", "");
+    if (hex.length === 3) hex = hex.split("").map(function (c) { return c + c; }).join("");
+    var n = parseInt(hex, 16);
+    return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
+  }
+  function rgbToHex(c) {
+    function h(x) { var s = Math.round(x).toString(16); return s.length < 2 ? "0" + s : s; }
+    return "#" + h(c.r) + h(c.g) + h(c.b);
+  }
+  function rgbToHsl(c) {
+    var r = c.r / 255, g = c.g / 255, b = c.b / 255;
+    var mx = Math.max(r, g, b), mn = Math.min(r, g, b), h, s, l = (mx + mn) / 2;
+    if (mx === mn) { h = 0; s = 0; }
+    else {
+      var d = mx - mn;
+      s = l > 0.5 ? d / (2 - mx - mn) : d / (mx + mn);
+      if (mx === r) h = (g - b) / d + (g < b ? 6 : 0);
+      else if (mx === g) h = (b - r) / d + 2;
+      else h = (r - g) / d + 4;
+      h *= 60;
+    }
+    return { h: h, s: s, l: l };
+  }
+  function hslToRgb(h, s, l) {
+    h = ((h % 360) + 360) % 360 / 360;
+    function hue(p, q, t) {
+      if (t < 0) t += 1; if (t > 1) t -= 1;
+      if (t < 1 / 6) return p + (q - p) * 6 * t;
+      if (t < 1 / 2) return q;
+      if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6;
+      return p;
+    }
+    var r, g, b;
+    if (s === 0) { r = g = b = l; }
+    else {
+      var q = l < 0.5 ? l * (1 + s) : l + s - l * s, p = 2 * l - q;
+      r = hue(p, q, h + 1 / 3); g = hue(p, q, h); b = hue(p, q, h - 1 / 3);
+    }
+    return { r: r * 255, g: g * 255, b: b * 255 };
+  }
+
+  // map a color to the three seasonal qualities (internal axes)
+  function colorToAxes(hex) {
+    var c = rgbToHsl(hexToRgb(hex));
+    var warm = Math.cos((c.h - 50) * Math.PI / 180) * (0.55 + 0.45 * c.s);
+    var val = (c.l - 0.5) * 2;
+    var clar = (c.s - 0.45) / 0.45;
+    return [clamp(warm, -1, 1), clamp(val, -1, 1), clamp(clar, -1, 1)];
+  }
+  function seasonByKey(k) {
+    for (var i = 0; i < SEASONS.length; i++) if (SEASONS[i].key === k) return SEASONS[i];
+    return SEASONS[0];
+  }
+  function axDist(a, t) {
+    var d0 = a[0] - t[0], d1 = a[1] - t[1], d2 = a[2] - t[2];
+    return Math.sqrt(d0 * d0 + d1 * d1 + d2 * d2);
+  }
+  function classifyColor(hex) {
+    var a = colorToAxes(hex), best = SEASONS[0], bd = Infinity;
+    SEASONS.forEach(function (s) { var d = axDist(a, s.t); if (d < bd) { bd = d; best = s; } });
+    return best;
+  }
+  function verdictFor(hex, key) {
+    var d = axDist(colorToAxes(hex), seasonByKey(key).t);
+    if (d < 0.8) return { cls: "glow", label: "A glow for you" };
+    if (d < 1.45) return { cls: "ok", label: "Wearable — not your best" };
+    return { cls: "clash", label: "Fights your season" };
+  }
+  function shiftToSeason(hex, key) {
+    var t = seasonByKey(key).t, c = rgbToHsl(hexToRgb(hex));
+    var targetS = clamp(0.5 + t[2] * 0.34, 0.1, 0.95);
+    var newS = c.s + (targetS - c.s) * 0.8;
+    var targetL = 0.5 + t[1] * 0.22;
+    var newL = c.l + (targetL - c.l) * 0.6;
+    var colWarm = Math.cos((c.h - 50) * Math.PI / 180);
+    var need = t[0] - colWarm;                 // >0 → wants warmer
+    var center = need > 0 ? 50 : 230;
+    var dh = ((center - c.h + 540) % 360) - 180;
+    var maxRot = Math.min(18, Math.abs(need) * 22);
+    var rot = clamp(dh, -maxRot, maxRot);
+    newS = clamp(newS, 0, 1); newL = clamp(newL, 0, 1);
+    var out = rgbToHex(hslToRgb(((c.h + rot) % 360 + 360) % 360, newS, newL));
+    return { hex: out, dh: Math.round(rot), ds: Math.round((newS - c.s) * 100), dl: Math.round((newL - c.l) * 100) };
+  }
+  function mixHex(a, b, r) {
+    var ca = hexToRgb(a), cb = hexToRgb(b);
+    return rgbToHex({ r: ca.r + (cb.r - ca.r) * r, g: ca.g + (cb.g - ca.g) * r, b: ca.b + (cb.b - ca.b) * r });
+  }
+  function miniPal(s) {
+    return s.pal.slice(0, 6).map(function (h) { return '<i style="background:' + h + '"></i>'; }).join("");
+  }
+  function sgn(n) { return (n > 0 ? "+" : "") + n; }
+
+  // reusable color control (picker + hex + HSL), calls back with the hex
+  function makeColorControl(root, onChange) {
+    root.innerHTML =
+      '<input type="color" class="cc-pick" aria-label="Color picker">' +
+      '<input type="text" class="cc-hex" spellcheck="false" maxlength="7" aria-label="Hex color">' +
+      '<div class="cc-hsl">' +
+        '<label>H<input type="number" class="cc-h" min="0" max="360"></label>' +
+        '<label>S<input type="number" class="cc-s" min="0" max="100"></label>' +
+        '<label>L<input type="number" class="cc-l" min="0" max="100"></label>' +
+      '</div>';
+    var pick = root.querySelector(".cc-pick"), hexI = root.querySelector(".cc-hex");
+    var hI = root.querySelector(".cc-h"), sI = root.querySelector(".cc-s"), lI = root.querySelector(".cc-l");
+    var cur = "#000000";
+    function setAll(hex, from) {
+      cur = hex;
+      if (from !== "pick") pick.value = hex;
+      if (from !== "hex") hexI.value = hex.toUpperCase();
+      if (from !== "hsl") {
+        var hsl = rgbToHsl(hexToRgb(hex));
+        hI.value = Math.round(hsl.h); sI.value = Math.round(hsl.s * 100); lI.value = Math.round(hsl.l * 100);
+      }
+      if (onChange) onChange(cur);
+    }
+    pick.addEventListener("input", function () { setAll(pick.value, "pick"); });
+    hexI.addEventListener("input", function () {
+      var v = hexI.value.trim(); if (v[0] !== "#") v = "#" + v;
+      if (/^#[0-9a-fA-F]{6}$/.test(v)) setAll(v.toLowerCase(), "hex");
+    });
+    function fromHSL() {
+      var h = clamp(parseFloat(hI.value) || 0, 0, 360);
+      var s = clamp(parseFloat(sI.value) || 0, 0, 100) / 100;
+      var l = clamp(parseFloat(lI.value) || 0, 0, 100) / 100;
+      setAll(rgbToHex(hslToRgb(h, s, l)), "hsl");
+    }
+    hI.addEventListener("input", fromHSL); sI.addEventListener("input", fromHSL); lI.addEventListener("input", fromHSL);
+    return { set: function (h) { setAll(h, ""); }, get: function () { return cur; } };
+  }
+
+  var lab = {};
+  function activeKey() { return state.labSeason || state.lastSeasonKey || SEASONS[0].key; }
+
+  function renderClassify(hex) {
+    var s = classifyColor(hex);
+    $("lab1-name").textContent = s.name;
+    $("lab1-pal").innerHTML = miniPal(s);
+    var v = verdictFor(hex, activeKey());
+    var el = $("lab1-verdict");
+    el.className = "verdict " + v.cls;
+    el.textContent = v.label + " · " + seasonByKey(activeKey()).name;
+  }
+  function renderShift(hex) {
+    var r = shiftToSeason(hex, activeKey());
+    $("lab2-from").style.background = hex;
+    $("lab2-from-hex").textContent = hex.toUpperCase();
+    $("lab2-to").style.background = r.hex;
+    $("lab2-to-hex").textContent = r.hex.toUpperCase();
+    $("lab2-deltas").innerHTML =
+      "<span>hue <b>" + sgn(r.dh) + "°</b></span>" +
+      "<span>sat <b>" + sgn(r.ds) + "%</b></span>" +
+      "<span>light <b>" + sgn(r.dl) + "%</b></span>";
+    $("lab2-tuned").textContent = "tuned to " + seasonByKey(activeKey()).name;
+  }
+  function renderMix() {
+    var m = mixHex(lab.mixA.get(), lab.mixB.get(), (+$("lab3-ratio").value) / 100);
+    $("lab3-out").style.background = m;
+    $("lab3-out-hex").textContent = m.toUpperCase();
+    var s = classifyColor(m);
+    $("lab3-season").textContent = s.name;
+    $("lab3-pal").innerHTML = miniPal(s);
+  }
+
+  lab.c1 = makeColorControl($("lab1-control"), renderClassify);
+  lab.c2 = makeColorControl($("lab2-control"), renderShift);
+  lab.mixA = makeColorControl($("lab3-a"), renderMix);
+  lab.mixB = makeColorControl($("lab3-b"), renderMix);
+  $("lab3-ratio").addEventListener("input", renderMix);
+
+  document.querySelectorAll(".lab-tab").forEach(function (t) {
+    t.addEventListener("click", function () { selectTab(t.dataset.tab); });
+  });
+  function selectTab(id) {
+    document.querySelectorAll(".lab-tab").forEach(function (t) {
+      t.setAttribute("aria-selected", t.dataset.tab === id ? "true" : "false");
+    });
+    document.querySelectorAll(".lab-panel").forEach(function (pn) {
+      pn.classList.toggle("on", pn.id === id);
+    });
+  }
+
+  (function populateSeasons() {
+    var sel = $("lab-season");
+    SEASONS.forEach(function (s) {
+      var o = document.createElement("option");
+      o.value = s.key; o.textContent = s.name;
+      sel.appendChild(o);
+    });
+    sel.addEventListener("change", function () {
+      state.labSeason = sel.value;
+      renderClassify(lab.c1.get());
+      renderShift(lab.c2.get());
+    });
+  })();
+
+  function openLab(from) {
+    state.labReturn = from;
+    if (from === "s-result" && state.lastSeasonKey) state.labSeason = state.lastSeasonKey;
+    $("lab-season").value = activeKey();
+    selectTab("lab-classify");
+    show("s-lab");
+    renderClassify(lab.c1.get());
+    renderShift(lab.c2.get());
+    renderMix();
+  }
+  $("open-lab-intro").addEventListener("click", function () { openLab("s-intro"); });
+  $("open-lab-result").addEventListener("click", function () { openLab("s-result"); });
+  $("lab-back").addEventListener("click", function () { show(state.labReturn || "s-intro"); });
+
+  // sensible starting colors
+  lab.c1.set("#C0392B");
+  lab.c2.set("#C0392B");
+  lab.mixA.set("#F2C230");
+  lab.mixB.set("#2E5AC0");
 
   // ---------- TOAST ----------
   var toastTimer = null;
