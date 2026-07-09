@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Gemini Chat + Nano Banana</title>
 <style>
 /* ── Design tokens ────────────────────────────────────────────── */
@@ -39,37 +39,50 @@ header {
   flex: 0 0 auto;
   background: var(--s2);
   border-bottom: 1px solid var(--border);
-  padding: 10px 16px;
+  padding: 9px 10px;
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
+  overflow: hidden;            /* never let the bar scroll */
+  padding-top: max(9px, env(safe-area-inset-top));
 }
 header h1 {
   font-size: 15px;
   font-weight: 600;
-  letter-spacing: .3px;
+  letter-spacing: .2px;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
+  flex: 0 0 auto;
+  white-space: nowrap;
 }
 header h1 .banana { font-size: 18px; }
-.grow { flex: 1; }
+header h1 .ttl { min-width: 0; }
+.grow { flex: 1 1 auto; min-width: 0; }
 .icon-btn {
+  flex: 0 0 auto;
   background: var(--s3);
   border: 1px solid var(--border);
   color: var(--text2);
   border-radius: 8px;
-  padding: 7px 12px;
-  font-size: 13px;
+  width: 36px; height: 34px;
+  display: grid; place-items: center;
+  font-size: 15px;
   cursor: pointer;
   transition: .15s;
 }
 .icon-btn:hover { color: var(--text); border-color: var(--violet); }
 
+/* narrow phones (iPhone 13 mini = 375pt): drop the wordmark, keep the banana */
+@media (max-width: 400px) {
+  header h1 .ttl { display: none; }
+}
+
 /* ── Mode switch ──────────────────────────────────────────────── */
 .modes {
+  flex: 0 0 auto;
   display: flex;
-  gap: 4px;
+  gap: 3px;
   background: var(--s1);
   border: 1px solid var(--border);
   border-radius: 9px;
@@ -81,31 +94,41 @@ header h1 .banana { font-size: 18px; }
   color: var(--text2);
   font-size: 12.5px;
   font-weight: 500;
-  padding: 6px 12px;
+  padding: 6px 10px;
   border-radius: 6px;
   cursor: pointer;
   transition: .15s;
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 4px;
+  white-space: nowrap;
 }
 .modes button.active { background: var(--s3); color: var(--text); }
 .modes button.active.img { color: var(--banana); }
 
-#imgModel {
+/* image-model picker lives in the composer, shown only in Image mode */
+.modelrow {
   display: none;
-  background: var(--s1);
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 9px;
+}
+.modelrow.show { display: flex; }
+.modelrow .mlabel { font-size: 12px; color: var(--text2); font-weight: 600; flex: 0 0 auto; }
+#imgModel {
+  flex: 1 1 auto;
+  min-width: 0;
+  background: var(--s3);
   border: 1px solid var(--border);
   color: var(--banana);
   border-radius: 9px;
-  padding: 7px 10px;
-  font-size: 12.5px;
+  padding: 8px 10px;
+  font-size: 13px;
   font-weight: 500;
   cursor: pointer;
   outline: none;
 }
-#imgModel:hover { border-color: var(--banana); }
-#imgModel.show { display: inline-block; }
+#imgModel:focus { border-color: var(--banana); }
 
 /* ── Messages ─────────────────────────────────────────────────── */
 #log {
@@ -174,7 +197,8 @@ header h1 .banana { font-size: 18px; }
   flex: 0 0 auto;
   border-top: 1px solid var(--border);
   background: var(--s2);
-  padding: 12px 16px;
+  padding: 12px 14px;
+  padding-bottom: max(12px, env(safe-area-inset-bottom));
 }
 .composer-inner { max-width: 820px; margin: 0 auto; }
 .attachments { display:flex; flex-wrap:wrap; gap:8px; margin-bottom: 8px; }
@@ -239,20 +263,14 @@ header h1 .banana { font-size: 18px; }
 <body>
 
 <header>
-  <h1><span class="banana">🍌</span> Gemini Chat</h1>
+  <h1><span class="banana">🍌</span><span class="ttl">Gemini</span></h1>
   <div class="modes" id="modes">
     <button data-mode="chat" class="active">💬 Chat</button>
     <button data-mode="image" class="img">🎨 Image</button>
   </div>
-  <select id="imgModel" title="Image model">
-    <option value="gemini-3.1-flash-image">Nano Banana 2 · Flash</option>
-    <option value="gemini-3-pro-image">Nano Banana Pro</option>
-    <option value="gemini-3.1-flash-lite-image">Nano Banana 2 Lite</option>
-    <option value="gemini-2.5-flash-image">Nano Banana (legacy)</option>
-  </select>
   <div class="grow"></div>
-  <button class="icon-btn" id="clearBtn" title="Clear conversation">Clear</button>
-  <button class="icon-btn" id="keyBtn" title="API key">🔑 Key</button>
+  <button class="icon-btn" id="clearBtn" title="Clear conversation" aria-label="Clear conversation">🗑</button>
+  <button class="icon-btn" id="keyBtn" title="API key" aria-label="API key">🔑</button>
 </header>
 
 <div id="log">
@@ -271,6 +289,15 @@ header h1 .banana { font-size: 18px; }
 
 <div id="composer">
   <div class="composer-inner">
+    <div class="modelrow" id="modelRow">
+      <span class="mlabel">🍌 Model</span>
+      <select id="imgModel" title="Image model">
+        <option value="gemini-3.1-flash-image">Nano Banana 2 · Flash</option>
+        <option value="gemini-3-pro-image">Nano Banana Pro</option>
+        <option value="gemini-3.1-flash-lite-image">Nano Banana 2 Lite</option>
+        <option value="gemini-2.5-flash-image">Nano Banana (legacy)</option>
+      </select>
+    </div>
     <div class="attachments" id="attachments"></div>
     <div class="inputbar">
       <button class="attach-btn" id="attachBtn" title="Attach image">📎</button>
@@ -339,7 +366,7 @@ document.querySelectorAll('#modes button').forEach(b => {
 function setMode(m){
   mode = m;
   document.querySelectorAll('#modes button').forEach(b => b.classList.toggle('active', b.dataset.mode===m));
-  document.querySelector('#imgModel').classList.toggle('show', m==='image');
+  document.querySelector('#modelRow').classList.toggle('show', m==='image');
   sendBtn.classList.toggle('img', m==='image');
   promptEl.placeholder = m==='image'
     ? 'Describe an image to generate… (attach a photo to edit it)'
