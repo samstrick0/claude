@@ -92,6 +92,21 @@ header h1 .banana { font-size: 18px; }
 .modes button.active { background: var(--s3); color: var(--text); }
 .modes button.active.img { color: var(--banana); }
 
+#imgModel {
+  display: none;
+  background: var(--s1);
+  border: 1px solid var(--border);
+  color: var(--banana);
+  border-radius: 9px;
+  padding: 7px 10px;
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+  outline: none;
+}
+#imgModel:hover { border-color: var(--banana); }
+#imgModel.show { display: inline-block; }
+
 /* ── Messages ─────────────────────────────────────────────────── */
 #log {
   flex: 1;
@@ -229,6 +244,12 @@ header h1 .banana { font-size: 18px; }
     <button data-mode="chat" class="active">💬 Chat</button>
     <button data-mode="image" class="img">🎨 Image</button>
   </div>
+  <select id="imgModel" title="Image model">
+    <option value="gemini-3.1-flash-image">Nano Banana 2 · Flash</option>
+    <option value="gemini-3-pro-image">Nano Banana Pro</option>
+    <option value="gemini-3.1-flash-lite-image">Nano Banana 2 Lite</option>
+    <option value="gemini-2.5-flash-image">Nano Banana (legacy)</option>
+  </select>
   <div class="grow"></div>
   <button class="icon-btn" id="clearBtn" title="Clear conversation">Clear</button>
   <button class="icon-btn" id="keyBtn" title="API key">🔑 Key</button>
@@ -282,8 +303,9 @@ header h1 .banana { font-size: 18px; }
 <script>
 const API_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
 const MODEL_CHAT  = 'gemini-2.5-flash';
-const MODEL_IMAGE = 'gemini-2.5-flash-image';   // "Nano Banana"
 const KEY_STORE = 'gemini_api_key';
+// Image model ("Nano Banana") is chosen via the #imgModel <select> in the header.
+function imageModel(){ return document.querySelector('#imgModel').value; }
 
 let mode = 'chat';
 let history = [];          // [{role:'user'|'model', parts:[...]}] for the API
@@ -317,12 +339,13 @@ document.querySelectorAll('#modes button').forEach(b => {
 function setMode(m){
   mode = m;
   document.querySelectorAll('#modes button').forEach(b => b.classList.toggle('active', b.dataset.mode===m));
+  document.querySelector('#imgModel').classList.toggle('show', m==='image');
   sendBtn.classList.toggle('img', m==='image');
   promptEl.placeholder = m==='image'
     ? 'Describe an image to generate… (attach a photo to edit it)'
     : 'Message Gemini…';
   $('#hint').innerHTML = m==='image'
-    ? 'Model: <b>Nano Banana</b> (gemini-2.5-flash-image) · Enter to send'
+    ? 'Generating with <b>Nano Banana</b> — pick the model above · Enter to send'
     : 'Enter to send · Shift+Enter for newline';
 }
 
@@ -453,7 +476,7 @@ async function send(){
   addTyping();
 
   try {
-    const model = mode==='image' ? MODEL_IMAGE : MODEL_CHAT;
+    const model = mode==='image' ? imageModel() : MODEL_CHAT;
     const body = { contents: history };
     if(mode==='image') body.generationConfig = { responseModalities: ['IMAGE','TEXT'] };
 
