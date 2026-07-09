@@ -462,6 +462,20 @@
   .mix-out { display:flex; align-items:center; gap:1.1rem; flex-wrap:wrap; }
   .mix-swatch { width:120px; height:82px; border-radius:12px; box-shadow:inset 0 0 0 1px rgba(0,0,0,0.14); }
 
+  /* shared-colors (overlap) tool */
+  .ov-selects { display:flex; align-items:center; gap:0.6rem; flex-wrap:wrap; margin-bottom:0.4rem; }
+  .ov-selects select {
+    font-family:var(--sans); font-size:0.9rem; color:var(--ink);
+    background:var(--panel-2); border:1px solid var(--hair);
+    border-radius:999px; padding:0.45rem 0.9rem; cursor:pointer; max-width:100%;
+  }
+  .ov-selects .ovx { font-family:var(--serif); font-size:1.1rem; color:var(--accent); }
+  .ov-msg { color:var(--muted); font-size:0.9rem; margin:0.9rem 0 0; max-width:60ch; }
+  .ov-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(44px, 1fr)); gap:6px; margin-top:1rem; }
+  .ov-sw { aspect-ratio:1; border-radius:9px; box-shadow:inset 0 0 0 1px rgba(0,0,0,0.14); }
+  .ov-refs { display:flex; gap:1.4rem; flex-wrap:wrap; margin-top:1.4rem; padding-top:1.2rem; border-top:1px solid var(--hair); }
+  .ov-ref .lab-h { margin:0 0 0.5rem; }
+
   /* ---------- oval cropper ---------- */
   .cropper {
     position: fixed; inset: 0; z-index: 60;
@@ -649,6 +663,7 @@
         <button class="lab-tab" data-tab="lab-classify" role="tab" aria-selected="true" type="button">Find its season</button>
         <button class="lab-tab" data-tab="lab-shift" role="tab" aria-selected="false" type="button">Shift to fit</button>
         <button class="lab-tab" data-tab="lab-mix" role="tab" aria-selected="false" type="button">Mixing bench</button>
+        <button class="lab-tab" data-tab="lab-overlap" role="tab" aria-selected="false" type="button">Shared colors</button>
       </div>
 
       <!-- Tool 1: classify -->
@@ -703,6 +718,23 @@
               <div class="mini-pal" id="lab3-pal"></div>
             </div>
           </div>
+        </div>
+      </div>
+
+      <!-- Tool 4: shared colors across seasons -->
+      <div class="lab-panel" id="lab-overlap" role="tabpanel">
+        <div class="lab-card">
+          <p class="lab-h">Colors that flatter more than one season</p>
+          <div class="ov-selects">
+            <select id="ov-a" aria-label="First season"></select>
+            <span class="ovx" aria-hidden="true">&#8745;</span>
+            <select id="ov-b" aria-label="Second season"></select>
+            <span class="ovx" aria-hidden="true">&#8745;</span>
+            <select id="ov-c" aria-label="Third season (optional)"></select>
+          </div>
+          <p class="ov-msg" id="ov-msg">—</p>
+          <div class="ov-grid" id="ov-grid"></div>
+          <div class="ov-refs" id="ov-refs"></div>
         </div>
       </div>
 
@@ -1456,29 +1488,112 @@
     });
   }
 
-  (function populateSeasons() {
-    var sel = $("lab-season");
+  function fillSeasonSelect(sel, includeNone) {
+    if (includeNone) {
+      var n = document.createElement("option");
+      n.value = ""; n.textContent = "— none —";
+      sel.appendChild(n);
+    }
     SEASONS.forEach(function (s) {
       var o = document.createElement("option");
       o.value = s.key; o.textContent = s.name;
       sel.appendChild(o);
     });
+  }
+
+  (function populateSeasons() {
+    var sel = $("lab-season");
+    fillSeasonSelect(sel, false);
     sel.addEventListener("change", function () {
       state.labSeason = sel.value;
       renderClassify(lab.c1.get());
       renderShift(lab.c2.get());
     });
+    fillSeasonSelect($("ov-a"), false);
+    fillSeasonSelect($("ov-b"), false);
+    fillSeasonSelect($("ov-c"), true);
+    ["ov-a", "ov-b", "ov-c"].forEach(function (id) {
+      $(id).addEventListener("change", renderOverlap);
+    });
   })();
+
+  // nearest season to a given one — its "sister"
+  function sisterKey(key) {
+    var s = seasonByKey(key), best = SEASONS[0], bd = Infinity;
+    SEASONS.forEach(function (o) {
+      if (o.key === key) return;
+      var d = axDist(s.t, o.t);
+      if (d < bd) { bd = d; best = o; }
+    });
+    return best.key;
+  }
+
+  // scan color space for colors that fall inside every selected season
+  function renderOverlap() {
+    var keys = [$("ov-a").value, $("ov-b").value, $("ov-c").value].filter(Boolean);
+    keys = keys.filter(function (k, i) { return keys.indexOf(k) === i; });   // unique
+    var seasons = keys.map(seasonByKey);
+
+    if (seasons.length < 2) {
+      $("ov-grid").innerHTML = "";
+      $("ov-refs").innerHTML = "";
+      $("ov-msg").textContent = "Pick two different seasons to see the colors you share.";
+      return;
+    }
+
+    var THRESH = 0.82;
+    var found = [];
+    for (var h = 0; h < 360; h += 12) {
+      [0.30, 0.45, 0.60, 0.78].forEach(function (s) {
+        [0.35, 0.48, 0.62, 0.76].forEach(function (l) {
+          var hex = rgbToHex(hslToRgb(h, s, l));
+          var a = colorToAxes(hex);
+          var fitsAll = seasons.every(function (se) { return axDist(a, se.t) < THRESH; });
+          if (fitsAll) found.push({ hex: hex, h: h, l: l });
+        });
+      });
+    }
+    found.sort(function (x, y) { return (x.h - y.h) || (x.l - y.l); });
+
+    // cap to an even, readable sample
+    var cap = 32, list = found;
+    if (found.length > cap) {
+      list = [];
+      var step = found.length / cap;
+      for (var i = 0; i < cap; i++) list.push(found[Math.floor(i * step)]);
+    }
+    $("ov-grid").innerHTML = list.map(function (c) {
+      return '<div class="ov-sw" title="' + c.hex.toUpperCase() + '" style="background:' + c.hex + '"></div>';
+    }).join("");
+
+    var names = seasons.map(function (s) { return s.name; });
+    var joined = names.length <= 1 ? names[0]
+      : names.length === 2 ? names[0] + " and " + names[1]
+      : names.slice(0, -1).join(", ") + ", and " + names[names.length - 1];
+    var n = found.length, msg;
+    if (n === 0) msg = "Almost nothing flatters " + joined + " — they sit on opposite sides of the color world. Try seasons that are closer cousins.";
+    else if (n < 8) msg = "Only a handful of colors bridge " + joined + " — here they are.";
+    else msg = n + " colors flatter " + joined + " alike — a safe common ground when you're dressing across seasons.";
+    $("ov-msg").textContent = msg;
+
+    $("ov-refs").innerHTML = seasons.map(function (s) {
+      return '<div class="ov-ref"><p class="lab-h">' + s.name + '</p><div class="mini-pal">' + miniPal(s) + '</div></div>';
+    }).join("");
+  }
 
   function openLab(from) {
     state.labReturn = from;
     if (from === "s-result" && state.lastSeasonKey) state.labSeason = state.lastSeasonKey;
     $("lab-season").value = activeKey();
+    $("ov-a").value = activeKey();
+    $("ov-b").value = sisterKey(activeKey());
+    $("ov-c").value = "";
     selectTab("lab-classify");
     show("s-lab");
     renderClassify(lab.c1.get());
     renderShift(lab.c2.get());
     renderMix();
+    renderOverlap();
   }
   $("open-lab-intro").addEventListener("click", function () { openLab("s-intro"); });
   $("open-lab-result").addEventListener("click", function () { openLab("s-result"); });
