@@ -72,7 +72,7 @@
     font-weight: 800;
     letter-spacing: 0.8px;
     color: #1a1526;
-    background: #7fd0ff;   /* v9 */
+    background: #c9a3f5;   /* v10 */
   }
 
   /* --- tab bar --- */
@@ -93,7 +93,7 @@
   .tabs button {
     flex: 1;
     padding: 10px 0;
-    font-size: 14px;
+    font-size: 13px;
     font-weight: 700;
     font-family: inherit;
     color: var(--muted);
@@ -393,6 +393,14 @@
     margin-top: 10px; font-size: 11px; line-height: 1.5; color: var(--muted);
   }
 
+  /* --- shadow mode --- */
+  .vol-row { display: flex; align-items: center; gap: 10px; margin-top: 13px; }
+  .vol-row span { font-size: 12.5px; color: var(--muted); font-weight: 600; flex-shrink: 0; }
+  .vol-row input[type="range"] { flex: 1; accent-color: var(--rec); height: 22px; }
+  .file-row { margin-top: 12px; }
+  .file-info { margin-top: 9px; font-size: 11.5px; color: var(--muted); line-height: 1.45; }
+  .file-info b { color: var(--play); font-weight: 700; }
+
   /* --- warm-up --- */
   .wu-status {
     font-size: 13px;
@@ -451,11 +459,12 @@
   <header>
     <h1>Voice Loop</h1>
     <p>Hands-free voice practice — pitch · resonance · weight</p>
-    <div class="version" id="version">v9</div>
+    <div class="version" id="version">v10</div>
   </header>
 
   <nav class="tabs" id="tabs">
     <button data-tab="practice" class="active">Practice</button>
+    <button data-tab="shadow">Shadow</button>
     <button data-tab="warmup">Warm-up</button>
     <button data-tab="settings">Settings</button>
   </nav>
@@ -498,6 +507,38 @@
         </div>
         <div class="take-note">R1 is your first vocal-tract resonance (median over the take) — the core feminization lever besides pitch. Aim roughly <b>+10–20% above your baseline</b>. Weight (H1–H2) is experimental: higher dB = lighter/breathier, low = pressed/heavy. Values shift with mic and noise, so trust trends over absolutes.</div>
       </div>
+    </section>
+
+    <!-- ============ SHADOW ============ -->
+    <section id="secShadow" hidden>
+      <div class="card">
+        <div class="card-head">Reference voice</div>
+        <div class="presets" id="shSource">
+          <button data-src="file" class="active">Audio file</button>
+          <button data-src="tts">Phone voice</button>
+        </div>
+        <div class="file-row" id="shFileRow">
+          <button class="secondary" id="shPickBtn" type="button">Choose audio file…</button>
+          <input type="file" id="shFile" accept="audio/*" hidden />
+          <div class="file-info" id="shFileInfo">No file yet. Anything from Voice Memos or the Files app works; Apple&nbsp;Music songs won't.</div>
+        </div>
+        <div class="file-row" id="shTtsRow" hidden>
+          <div class="file-info">Your phone reads a practice passage sentence by sentence in its female voice — no file needed. Speak along with each sentence.</div>
+        </div>
+        <div class="vol-row">
+          <span>Her volume</span>
+          <input type="range" id="shVol" min="10" max="100" value="90" aria-label="Reference volume" />
+        </div>
+      </div>
+      <button class="primary" id="shBtn">Start shadowing</button>
+      <div class="wu-status" id="shStatus"></div>
+      <div class="wu-live" id="shLive"></div>
+      <div class="card" id="shCard" hidden>
+        <div class="card-head">Her vs you — last chunk</div>
+        <div class="tiles" id="shTiles"></div>
+        <div class="take-note">Speak along with her, then hear yourself back — the next chunk starts on its own. Matching her pitch and R1 is the drill. Chunk length follows the Segment length setting.</div>
+      </div>
+      <div class="note"><b>Headphones required</b> — through speakers, her voice records into your take.</div>
     </section>
 
     <!-- ============ WARM-UP ============ -->
@@ -630,6 +671,31 @@
   var wuRunning = false;
   var wuTimers = [];
   var wuCollect = null;           // array while the eee check is sampling
+
+  // --- shadow state (speak along with a reference voice in headphones) ---
+  var sessionMode = "loop";       // "loop" | "shadow" — routes recorder.onstop
+  var shRunning = false;
+  var shBuf = null;               // decoded reference AudioBuffer (file mode)
+  var shName = "";
+  var shPos = 0;                  // playback offset into the reference (s)
+  var shChunkLen = 0;             // length of the chunk just shadowed (s)
+  var shSrcNode = null;           // currently playing reference/take source
+  var shGainNode = null;
+  var shTimers = [];
+  var shSrc = "file";             // "file" | "tts"
+  var shGainVal = 0.9;
+  var shSent = 0;                 // sentence index (tts mode)
+  try { shSrc = localStorage.getItem("vl_shadow_src") === "tts" ? "tts" : "file"; } catch (e) {}
+  try { var sv = parseInt(localStorage.getItem("vl_shadow_vol"), 10); if (isFinite(sv)) shGainVal = Math.max(0.1, Math.min(1, sv / 100)); } catch (e) {}
+  // The Rainbow Passage — the public-domain paragraph voice therapists use.
+  var SH_SENTENCES = [
+    "When the sunlight strikes raindrops in the air, they act as a prism and form a rainbow.",
+    "The rainbow is a division of white light into many beautiful colors.",
+    "These take the shape of a long round arch, with its path high above, and its two ends apparently beyond the horizon.",
+    "There is, according to legend, a boiling pot of gold at one end.",
+    "People look, but no one ever finds it.",
+    "When a man looks for something beyond his reach, his friends say he is looking for the pot of gold at the end of the rainbow."
+  ];
 
   // --- on-screen diagnostic log (readable on a phone, with a Copy button) ---
   function log(msg) {
@@ -946,8 +1012,21 @@
     baselineInfo: document.getElementById("baselineInfo"),
     tabs: document.getElementById("tabs"),
     secPractice: document.getElementById("secPractice"),
+    secShadow: document.getElementById("secShadow"),
     secWarmup: document.getElementById("secWarmup"),
     secSettings: document.getElementById("secSettings"),
+    shSource: document.getElementById("shSource"),
+    shFileRow: document.getElementById("shFileRow"),
+    shTtsRow: document.getElementById("shTtsRow"),
+    shPickBtn: document.getElementById("shPickBtn"),
+    shFile: document.getElementById("shFile"),
+    shFileInfo: document.getElementById("shFileInfo"),
+    shVol: document.getElementById("shVol"),
+    shBtn: document.getElementById("shBtn"),
+    shStatus: document.getElementById("shStatus"),
+    shLive: document.getElementById("shLive"),
+    shCard: document.getElementById("shCard"),
+    shTiles: document.getElementById("shTiles"),
     wuBtn: document.getElementById("wuBtn"),
     wuStatus: document.getElementById("wuStatus"),
     wuLive: document.getElementById("wuLive"),
@@ -971,6 +1050,7 @@
     btn.classList.add("active");
     var t = btn.getAttribute("data-tab");
     els.secPractice.hidden = t !== "practice";
+    els.secShadow.hidden = t !== "shadow";
     els.secWarmup.hidden = t !== "warmup";
     els.secSettings.hidden = t !== "settings";
   });
@@ -1128,6 +1208,11 @@
         ? ("Pitch <b>" + Math.round(f) + "</b> Hz" + (r1s ? " · R1 <b>" + Math.round(r1s) + "</b> Hz" : ""))
         : "<span style=\"opacity:.55\">— listening —</span>";
     }
+    if (shRunning && phase === "recording") {
+      els.shLive.innerHTML = f
+        ? ("You: <b>" + Math.round(f) + "</b> Hz" + (r1s ? " · R1 <b>" + Math.round(r1s) + "</b> Hz" : ""))
+        : "<span style=\"opacity:.55\">— listening —</span>";
+    }
   }
   function stopLiveMeter() {
     if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
@@ -1137,6 +1222,7 @@
     els.pitchLive.textContent = "";
     els.resLive.textContent = "";
     els.wuLive.textContent = "";
+    els.shLive.textContent = "";
   }
 
   // --- reference drone (headphones only) ---
@@ -1180,37 +1266,32 @@
     setTimeout(done, total);
   }
 
-  // --- per-take analysis (runs on the decoded AudioBuffer) ---
-  function analyzeTake(audioBuf) {
-    try {
-      var sr = audioBuf.sampleRate;
-      var data = audioBuf.getChannelData(0);
-      var factor = Math.max(1, Math.floor(sr / 8000));    // downsample to ~8 kHz
-      var dsSr = sr / factor;
-      var ds = downsample(data, factor);
-      var dsLen = ds.length;
-      var win = 1024, hop = 256, trace = [], voiced = [], r1s = [], ws = [];
-      for (var start = 0; start + win <= dsLen; start += hop) {
-        var frame = ds.subarray(start, start + win);
-        var f = detectPitch(frame, dsSr);
-        trace.push({ t: start / dsSr, hz: f });
-        if (f) {
-          voiced.push(f);
-          var r1 = estimateR1(frame, dsSr);
-          if (r1) r1s.push(r1);
-          var w = h1h2(frame, dsSr, f);
-          if (w != null) ws.push(w);
-        }
+  // --- pitch/resonance/weight analysis over any raw sample array ---
+  // Shared by the practice loop (your takes) and shadow mode (her audio too).
+  function analyzeSamples(data, sr) {
+    var factor = Math.max(1, Math.floor(sr / 8000));    // downsample to ~8 kHz
+    var dsSr = sr / factor;
+    var ds = downsample(data, factor);
+    var dsLen = ds.length;
+    var win = 1024, hop = 256, trace = [], voiced = [], r1s = [], ws = [];
+    for (var start = 0; start + win <= dsLen; start += hop) {
+      var frame = ds.subarray(start, start + win);
+      var f = detectPitch(frame, dsSr);
+      trace.push({ t: start / dsSr, hz: f });
+      if (f) {
+        voiced.push(f);
+        var r1 = estimateR1(frame, dsSr);
+        if (r1) r1s.push(r1);
+        var w = h1h2(frame, dsSr, f);
+        if (w != null) ws.push(w);
       }
-      if (!voiced.length) {
-        lastTakeMean = null; lastStats = null;
-        renderTake(null, trace, audioBuf.duration);
-        log("take analysis: no voiced pitch");
-        return null;
-      }
-      var mean = voiced.reduce(function (a, b) { return a + b; }, 0) / voiced.length;
-      var sorted = voiced.slice().sort(function (a, b) { return a - b; });
-      var stats = {
+    }
+    var dur = data.length / sr;
+    if (!voiced.length) return { stats: null, trace: trace, dur: dur };
+    var mean = voiced.reduce(function (a, b) { return a + b; }, 0) / voiced.length;
+    var sorted = voiced.slice().sort(function (a, b) { return a - b; });
+    return {
+      stats: {
         mean: mean,
         median: sorted[Math.floor(sorted.length / 2)],
         min: sorted[0],
@@ -1218,12 +1299,28 @@
         pctIn: Math.round(100 * voiced.filter(function (f) { return f >= targetLow && f <= targetHigh; }).length / voiced.length),
         r1Med: median(r1s),
         wMed: median(ws)
-      };
-      lastTakeMean = mean;
+      },
+      trace: trace,
+      dur: dur
+    };
+  }
+
+  // --- per-take analysis (runs on the decoded AudioBuffer) ---
+  function analyzeTake(audioBuf) {
+    try {
+      var res = analyzeSamples(audioBuf.getChannelData(0), audioBuf.sampleRate);
+      if (!res.stats) {
+        lastTakeMean = null; lastStats = null;
+        renderTake(null, res.trace, res.dur);
+        log("take analysis: no voiced pitch");
+        return null;
+      }
+      var stats = res.stats;
+      lastTakeMean = stats.mean;
       lastStats = stats;
       try { window.__vl.lastStats = stats; } catch (e) {}
-      renderTake(stats, trace, audioBuf.duration);
-      log("take: mean " + Math.round(mean) + "Hz, " + stats.pctIn + "% in band" +
+      renderTake(stats, res.trace, res.dur);
+      log("take: mean " + Math.round(stats.mean) + "Hz, " + stats.pctIn + "% in band" +
           (stats.r1Med ? ", R1 " + Math.round(stats.r1Med) + "Hz" : "") +
           (stats.wMed != null ? ", H1-H2 " + stats.wMed.toFixed(1) + "dB" : ""));
       return stats;
@@ -1423,6 +1520,11 @@
     var size = blob.size;
     chunks = [];
     log("rec stop: blob " + size + " bytes");
+    if (sessionMode === "shadow") {
+      if (shRunning) handleShadowTake(blob);
+      else setPhase("idle");
+      return;
+    }
     if (!running) { setPhase("idle"); return; }
     if (size > 0) {
       emptyStreak = 0;
@@ -1505,8 +1607,25 @@
     });
   }
 
+  // One recorder per session, reused every segment. Creating a new
+  // MediaRecorder per segment is what iOS chokes on.
+  function createRecorder() {
+    mimeType = pickMime();
+    try {
+      var opts = mimeType ? { mimeType: mimeType } : undefined;
+      try { recorder = new MediaRecorder(stream, opts); }
+      catch (e) { recorder = new MediaRecorder(stream); }
+    } catch (e2) {
+      log("MediaRecorder create FAILED: " + e2);
+      return false;
+    }
+    recorder.ondataavailable = function (ev) { if (ev.data && ev.data.size) chunks.push(ev.data); };
+    recorder.onstop = handleStop;
+    return true;
+  }
+
   async function start() {
-    if (wuRunning) return;
+    if (wuRunning || shRunning) return;
     // Claim the audio session BEFORE grabbing the mic — this is what keeps
     // the car's music from resuming during the record→playback handoff.
     setAudioSession("play-and-record");
@@ -1525,28 +1644,20 @@
     els.micNow.innerHTML = "Recording from: <b>" + escapeHtml(micLabel) + "</b>";
     log("mic: " + micLabel);
     refreshMics();      // labels are available now that permission is granted
-    mimeType = pickMime();
-    // One recorder for the whole session, reused every segment. Creating a new
-    // MediaRecorder per segment is what iOS chokes on.
-    try {
-      var opts = mimeType ? { mimeType: mimeType } : undefined;
-      try { recorder = new MediaRecorder(stream, opts); }
-      catch (e) { recorder = new MediaRecorder(stream); }
-    } catch (e) {
-      log("MediaRecorder create FAILED: " + e);
+    if (!createRecorder()) {
       notePractice("This browser could not start the recorder.", true);
       setAudioSession("auto");
       return;
     }
-    recorder.ondataavailable = function (ev) { if (ev.data && ev.data.size) chunks.push(ev.data); };
-    recorder.onstop = handleStop;
     requestWake();      // keep the screen on during practice
     recordArmed = false;
     emptyStreak = 0;
+    sessionMode = "loop";
     running = true;
     els.startBtn.textContent = "Stop";
     els.startBtn.classList.add("stop");
     els.wuBtn.disabled = true;
+    els.shBtn.disabled = true;
     els.lengthBox.setAttribute("aria-disabled", "true");
     els.micBox.setAttribute("aria-disabled", "true");
     els.micSelect.disabled = true;
@@ -1563,6 +1674,7 @@
     els.startBtn.textContent = "Start practice";
     els.startBtn.classList.remove("stop");
     els.wuBtn.disabled = false;
+    els.shBtn.disabled = false;
     els.lengthBox.removeAttribute("aria-disabled");
     els.micBox.removeAttribute("aria-disabled");
     els.micSelect.disabled = false;
@@ -1599,7 +1711,7 @@
   }
 
   async function startWarmup() {
-    if (running || wuRunning) return;
+    if (running || wuRunning || shRunning) return;
     setAudioSession("play-and-record");
     var ctx = ensureAudioCtx();
     if (!ctx) { wuStatus("This browser can't play audio.", true); setAudioSession("auto"); return; }
@@ -1616,6 +1728,7 @@
     els.wuBtn.textContent = "Stop warm-up";
     els.wuBtn.classList.add("stop");
     els.startBtn.disabled = true;
+    els.shBtn.disabled = true;
     els.wuResult.hidden = true;
     startLiveMeter();
     log("warm-up start");
@@ -1706,6 +1819,7 @@
     els.wuBtn.textContent = "Start warm-up";
     els.wuBtn.classList.remove("stop");
     els.startBtn.disabled = false;
+    els.shBtn.disabled = false;
     wuStatus(msg || "", false);
     if (!running) {
       stopLiveMeter();
@@ -1727,6 +1841,318 @@
     els.wuResultText.innerHTML += "<br>Saved as your new eee baseline.";
     log("eee baseline reset: " + JSON.stringify(lastWu));
   };
+
+  // --- shadow mode: speak along with a reference voice in headphones ---
+  // Chunked mimicry: a chunk of her plays while you speak along (recorded),
+  // then you hear yourself back with a her-vs-you comparison, then the next
+  // chunk starts — fully hands-free. "Phone voice" mode reads the Rainbow
+  // Passage with speechSynthesis instead of a file.
+  function fmtDur(s) {
+    var m = Math.floor(s / 60), r = Math.round(s % 60);
+    return m + ":" + String(r).padStart(2, "0");
+  }
+  function shStatusMsg(msg, on) {
+    els.shStatus.textContent = msg;
+    els.shStatus.classList.toggle("on", !!on);
+  }
+
+  // Persist the chosen reference file in IndexedDB so it survives reloads
+  // (audio is far too big for localStorage). All best-effort.
+  function idbOpen(cb) {
+    try {
+      var req = indexedDB.open("voiceloop", 1);
+      req.onupgradeneeded = function () { req.result.createObjectStore("kv"); };
+      req.onsuccess = function () { cb(req.result); };
+      req.onerror = function () { cb(null); };
+    } catch (e) { cb(null); }
+  }
+  function idbSaveShadow(blob, name) {
+    idbOpen(function (db) {
+      if (!db) return;
+      try {
+        var st = db.transaction("kv", "readwrite").objectStore("kv");
+        st.put(blob, "shadowBlob");
+        st.put(name, "shadowName");
+      } catch (e) {}
+    });
+  }
+  function idbLoadShadow() {
+    idbOpen(function (db) {
+      if (!db) return;
+      try {
+        var tx = db.transaction("kv", "readonly");
+        var st = tx.objectStore("kv");
+        var rb = st.get("shadowBlob"), rn = st.get("shadowName");
+        tx.oncomplete = function () {
+          if (rb.result) loadShadowBlob(rb.result, (rn.result || "saved audio"), false);
+        };
+      } catch (e) {}
+    });
+  }
+
+  function loadShadowBlob(blob, name, persist) {
+    els.shFileInfo.textContent = "Loading “" + name + "”…";
+    var ctx = ensureAudioCtx();
+    if (!ctx || !blob.arrayBuffer) { els.shFileInfo.textContent = "This browser can't decode audio files."; return; }
+    blob.arrayBuffer().then(function (buf) {
+      ctx.decodeAudioData(buf, function (abuf) {
+        shBuf = abuf; shName = name;
+        els.shFileInfo.innerHTML = "<b>" + escapeHtml(name) + "</b> · " + fmtDur(abuf.duration) + " · ready";
+        log("shadow file: " + name + " (" + abuf.duration.toFixed(1) + "s)");
+        if (persist) idbSaveShadow(blob, name);
+      }, function (e) {
+        els.shFileInfo.textContent = "Couldn't read that file — try an mp3, m4a, or wav.";
+        log("shadow decode failed: " + e);
+      });
+    }).catch(function (e) { log("shadow read failed: " + e); });
+  }
+
+  function pickFemaleVoice() {
+    try {
+      var vs = window.speechSynthesis.getVoices().filter(function (v) {
+        return v.lang && v.lang.indexOf("en") === 0;
+      });
+      var fem = /samantha|karen|victoria|moira|tessa|ava|allison|susan|zoe|nicky|serena|martha|kate|female|woman/i;
+      for (var i = 0; i < vs.length; i++) { if (fem.test(vs[i].name)) return vs[i]; }
+      return vs[0] || null;
+    } catch (e) { return null; }
+  }
+
+  function shAfter(ms, fn) { shTimers.push(setTimeout(fn, ms)); }
+
+  async function startShadow() {
+    if (running || wuRunning || shRunning) return;
+    if (shSrc === "file" && !shBuf) { shStatusMsg("Pick an audio file of her first (or switch to Phone voice).", true); return; }
+    if (shSrc === "tts" && !("speechSynthesis" in window)) { shStatusMsg("This browser has no built-in reading voice — use an audio file.", true); return; }
+    setAudioSession("play-and-record");
+    var ctx = ensureAudioCtx();
+    if (!ctx) { shStatusMsg("This browser can't play audio.", true); setAudioSession("auto"); return; }
+    claimNowPlaying();
+    try {
+      await ensureStream();
+    } catch (e) {
+      shStatusMsg("Microphone access is needed for shadowing.", true);
+      setAudioSession("auto");
+      return;
+    }
+    if (!createRecorder()) {
+      shStatusMsg("This browser could not start the recorder.", true);
+      setAudioSession("auto");
+      return;
+    }
+    requestWake();
+    sessionMode = "shadow";
+    shRunning = true;
+    shPos = 0; shSent = 0;
+    emptyStreak = 0;
+    els.shBtn.textContent = "Stop shadowing";
+    els.shBtn.classList.add("stop");
+    els.startBtn.disabled = true;
+    els.wuBtn.disabled = true;
+    startLiveMeter();
+    log("shadow start · " + (shSrc === "tts" ? "phone voice" : shName) + " · " + duration + "s chunks");
+    shadowChunk();
+  }
+
+  function shadowChunk() {
+    if (!shRunning) return;
+    if (shSrc === "tts") { shadowSentence(); return; }
+    var total = shBuf.duration;
+    if (shPos >= total - 0.5) {
+      var c = ensureAudioCtx();
+      if (c) { schedTone(c, c.currentTime, 660, 0, 0.12, 0.25); schedTone(c, c.currentTime, 880, 0.13, 0.12, 0.25); schedTone(c, c.currentTime, 1100, 0.26, 0.2, 0.25); }
+      endShadow("Done — you shadowed the whole clip.");
+      return;
+    }
+    var len = Math.min(duration, total - shPos);
+    shChunkLen = len;
+    var idx = Math.floor(shPos / duration) + 1, n = Math.ceil(total / duration);
+    setPhase("recording");
+    shStatusMsg("Chunk " + idx + "/" + n + " — speak along with her.", true);
+    var ctx = audioCtx, t = ctx.currentTime;
+    schedTone(ctx, t, 740, 0, 0.11, 0.28);
+    schedTone(ctx, t, 988, 0.14, 0.13, 0.28);
+    shAfter(340, function () {
+      if (!shRunning) return;
+      chunks = [];
+      try { recorder.start(); } catch (e) { log("shadow rec FAILED: " + e); endShadow("Recorder failed — try again."); return; }
+      try {
+        var src = audioCtx.createBufferSource();
+        src.buffer = shBuf;
+        shGainNode = audioCtx.createGain();
+        shGainNode.gain.value = shGainVal;
+        src.connect(shGainNode); shGainNode.connect(audioCtx.destination);
+        src.onended = function () { shAfter(400, stopRecorder); };  // small tail so you can finish
+        src.start(0, shPos, len);
+        shSrcNode = src;
+      } catch (e) { log("shadow ref play FAILED: " + e); endShadow("Playback failed."); return; }
+      startTimer(Math.max(1, Math.round(len)));
+      shAfter((len + 4) * 1000, function () {   // safety net
+        if (recorder && recorder.state === "recording") { log("shadow safety-net stop"); stopRecorder(); }
+      });
+    });
+  }
+
+  function shadowSentence() {
+    if (!shRunning) return;
+    if (shSent >= SH_SENTENCES.length) {
+      endShadow("Passage complete — nice work.");
+      return;
+    }
+    shChunkLen = 0;
+    setPhase("recording");
+    shStatusMsg("Sentence " + (shSent + 1) + "/" + SH_SENTENCES.length + " — speak along.", true);
+    chunks = [];
+    try { recorder.start(); } catch (e) { log("shadow rec FAILED: " + e); endShadow("Recorder failed — try again."); return; }
+    var ended = false;
+    var finish = function () { if (ended) return; ended = true; shAfter(400, stopRecorder); };
+    try {
+      var u = new SpeechSynthesisUtterance(SH_SENTENCES[shSent]);
+      var v = pickFemaleVoice();
+      if (v) u.voice = v;
+      u.rate = 0.95;
+      u.onend = finish;
+      u.onerror = finish;
+      window.speechSynthesis.speak(u);
+    } catch (e) { log("tts failed: " + e); }
+    shAfter(15000, finish);   // safety: some engines never fire onend
+  }
+
+  function handleShadowTake(blob) {
+    if (!shRunning) return;
+    // Analyze HER side of this chunk (file mode) with the same pipeline.
+    var refStats = null;
+    if (shSrc === "file" && shChunkLen > 0) {
+      try {
+        var sr = shBuf.sampleRate, d = shBuf.getChannelData(0);
+        var s0 = Math.floor(shPos * sr), s1 = Math.min(d.length, Math.floor((shPos + shChunkLen) * sr));
+        refStats = analyzeSamples(d.subarray(s0, s1), sr).stats;
+      } catch (e) { log("ref analyze failed: " + e); }
+    }
+    if (!blob.size) {
+      log("shadow: empty take — skipping playback");
+      shAfter(300, advanceShadow);
+      return;
+    }
+    setPhase("playing");
+    shStatusMsg("Listen back — that was you.", true);
+    blob.arrayBuffer().then(function (buf) {
+      audioCtx.decodeAudioData(buf, function (abuf) {
+        if (!shRunning) return;
+        var yours = null;
+        try { yours = analyzeSamples(abuf.getChannelData(0), abuf.sampleRate).stats; } catch (e) { log("take analyze failed: " + e); }
+        renderShadowCompare(refStats, yours);
+        var advanced = false;
+        var adv = function () { if (advanced) return; advanced = true; clearTimeout(guard); shSrcNode = null; advanceShadow(); };
+        var guard = setTimeout(function () { log("shadow playback safety-net"); adv(); }, (abuf.duration + 3) * 1000);
+        try {
+          var src = audioCtx.createBufferSource();
+          src.buffer = abuf;
+          src.connect(audioCtx.destination);
+          src.onended = adv;
+          src.start();
+          shSrcNode = src;
+          startTimer(Math.max(1, Math.round(abuf.duration)));
+        } catch (e) { log("shadow take play failed: " + e); adv(); }
+      }, function (e) { log("shadow take decode failed: " + e); shAfter(300, advanceShadow); });
+    }).catch(function (e) { log("shadow take read failed: " + e); shAfter(300, advanceShadow); });
+  }
+
+  function advanceShadow() {
+    if (!shRunning) return;
+    shPos += shChunkLen;
+    shSent++;
+    shadowChunk();
+  }
+
+  function renderShadowCompare(her, you) {
+    els.shCard.hidden = false;
+    var h = "";
+    if (her) {
+      h += tile("Her pitch", Math.round(her.mean) + " Hz", her.r1Med ? "R1 " + Math.round(her.r1Med) + " Hz" : "", "", "");
+    } else {
+      h += tile("Her pitch", "—", shSrc === "tts" ? "phone voice (not analyzable)" : "no clear voice in chunk", "", "");
+    }
+    if (you) {
+      var sub = you.r1Med ? "R1 " + Math.round(you.r1Med) + " Hz" : "", subCls = "";
+      if (her && you.r1Med && her.r1Med) {
+        var rd = Math.round((you.r1Med / her.r1Med - 1) * 100);
+        sub = "R1 " + Math.round(you.r1Med) + " Hz (" + (rd >= 0 ? "+" : "") + rd + "% vs her)";
+        if (Math.abs(rd) <= 10) subCls = "good";
+      }
+      var cls = "";
+      if (her) {
+        var pd = Math.round((you.mean / her.mean - 1) * 100);
+        if (Math.abs(pd) <= 8) cls = "good";
+      }
+      h += tile("Your pitch", Math.round(you.mean) + " Hz" + (her ? " (" + (you.mean >= her.mean ? "+" : "") + Math.round((you.mean / her.mean - 1) * 100) + "%)" : ""), sub, cls, subCls);
+    } else {
+      h += tile("Your pitch", "—", "no clear voice detected", "", "");
+    }
+    els.shTiles.innerHTML = h;
+    if (her && you) {
+      log("shadow chunk: her " + Math.round(her.mean) + "Hz/R1 " + (her.r1Med ? Math.round(her.r1Med) : "?") +
+          " vs you " + Math.round(you.mean) + "Hz/R1 " + (you.r1Med ? Math.round(you.r1Med) : "?"));
+    }
+  }
+
+  function endShadow(msg) {
+    for (var i = 0; i < shTimers.length; i++) clearTimeout(shTimers[i]);
+    shTimers = [];
+    shRunning = false;
+    try { if ("speechSynthesis" in window) window.speechSynthesis.cancel(); } catch (e) {}
+    if (shSrcNode) { try { shSrcNode.onended = null; shSrcNode.stop(); } catch (e) {} shSrcNode = null; }
+    shGainNode = null;
+    if (recorder && recorder.state !== "inactive") {
+      try { recorder.stop(); } catch (e) {}
+    }
+    clearInterval(timerId);
+    stopLiveMeter();
+    releaseWake();
+    els.shBtn.textContent = "Start shadowing";
+    els.shBtn.classList.remove("stop");
+    els.startBtn.disabled = false;
+    els.wuBtn.disabled = false;
+    shStatusMsg(msg || "", false);
+    setPhase("idle");
+    showCount(duration);
+    if (!running) {
+      setAudioSession("auto");
+      try { if ("mediaSession" in navigator) navigator.mediaSession.playbackState = "none"; } catch (e) {}
+    }
+    log("shadow end");
+  }
+
+  els.shBtn.onclick = function () {
+    if (shRunning) endShadow("Shadowing stopped.");
+    else startShadow();
+  };
+  els.shPickBtn.onclick = function () { els.shFile.click(); };
+  els.shFile.addEventListener("change", function () {
+    var f = els.shFile.files && els.shFile.files[0];
+    if (f) loadShadowBlob(f, f.name, true);
+  });
+  els.shSource.addEventListener("click", function (e) {
+    var btn = e.target.closest("button");
+    if (!btn || shRunning) return;
+    shSrc = btn.getAttribute("data-src") === "tts" ? "tts" : "file";
+    try { localStorage.setItem("vl_shadow_src", shSrc); } catch (e2) {}
+    applyShadowSourceUI();
+  });
+  function applyShadowSourceUI() {
+    var all = els.shSource.querySelectorAll("button");
+    for (var i = 0; i < all.length; i++) all[i].classList.toggle("active", all[i].getAttribute("data-src") === shSrc);
+    els.shFileRow.hidden = shSrc !== "file";
+    els.shTtsRow.hidden = shSrc !== "tts";
+  }
+  els.shVol.value = Math.round(shGainVal * 100);
+  els.shVol.addEventListener("input", function () {
+    shGainVal = Math.max(0.1, Math.min(1, parseInt(els.shVol.value, 10) / 100));
+    try { localStorage.setItem("vl_shadow_vol", els.shVol.value); } catch (e) {}
+    if (shGainNode) { try { shGainNode.gain.value = shGainVal; } catch (e) {} }
+  });
+  applyShadowSourceUI();
+  idbLoadShadow();   // restore the last reference file, if one was saved
 
   els.startBtn.onclick = function () { running ? stop() : start(); };
   els.baselineBtn.onclick = setBaselineFromLastTake;
@@ -1829,12 +2255,13 @@
   };
 
   // Analysis internals, exposed for automated testing only.
-  window.__vl = { lastStats: null, detectPitch: detectPitch, estimateR1: estimateR1, h1h2: h1h2, downsample: downsample };
+  window.__vl = { lastStats: null, detectPitch: detectPitch, estimateR1: estimateR1, h1h2: h1h2, downsample: downsample, analyzeSamples: analyzeSamples };
 
   // graceful message if the browser can't record
   if (!navigator.mediaDevices || typeof MediaRecorder === "undefined") {
     els.startBtn.disabled = true;
     els.wuBtn.disabled = true;
+    els.shBtn.disabled = true;
     notePractice("This browser can't record audio. Open the page in Safari or Chrome.", true);
   }
 })();
