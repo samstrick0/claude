@@ -241,6 +241,47 @@ header h1 .ttl { min-width: 0; }
 .send-btn svg { width:19px; height:19px; }
 .hint { font-size: 11.5px; color: var(--text2); margin-top: 7px; text-align:center; }
 .hint b { color: var(--banana); }
+#prompt[readonly] { cursor: pointer; }
+
+/* ── Full-screen composer ─────────────────────────────────────────
+   Fills the pinned body (which is already sized to the visible area,
+   so it sits above the keyboard). A single tall textarea handles its
+   own caret-scrolling natively — that's what "scrolls perfectly". */
+#composeView {
+  display: none;
+  position: absolute; inset: 0;
+  z-index: 40;
+  background: var(--bg);
+  flex-direction: column;
+}
+#composeView.show { display: flex; }
+.cv-bar {
+  flex: 0 0 auto;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 12px;
+  padding-top: max(10px, env(safe-area-inset-top));
+  border-bottom: 1px solid var(--border);
+  background: var(--s2);
+}
+.cv-right { display: flex; align-items: center; gap: 4px; }
+.cv-title { font-size: 14px; color: var(--text2); font-weight: 600; }
+.cv-btn {
+  background: none; border: none; color: var(--text2);
+  font-size: 16px; padding: 6px 10px; cursor: pointer; border-radius: 8px;
+}
+.cv-send { color: var(--violet); font-weight: 700; }
+.cv-send.img { color: var(--banana); }
+.cv-attach { display: flex; flex-wrap: wrap; gap: 8px; padding: 10px 14px 0; }
+.cv-attach:empty { display: none; }
+#cvText {
+  flex: 1; min-height: 0;
+  width: 100%;
+  background: var(--bg); border: none; outline: none;
+  color: var(--text);
+  font-family: inherit; font-size: 16px; line-height: 1.55;
+  padding: 14px 16px calc(20px + env(safe-area-inset-bottom));
+  resize: none;
+}
 
 /* ── Modal (API key) ──────────────────────────────────────────── */
 .modal-bg {
@@ -310,13 +351,27 @@ header h1 .ttl { min-width: 0; }
     <div class="attachments" id="attachments"></div>
     <div class="inputbar">
       <button class="attach-btn" id="attachBtn" title="Attach image">📎</button>
-      <textarea id="prompt" rows="1" placeholder="Message Gemini…"></textarea>
+      <textarea id="prompt" rows="1" placeholder="Message Gemini…" readonly></textarea>
       <button class="send-btn" id="sendBtn" title="Send">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
       </button>
     </div>
-    <div class="hint" id="hint">Enter to send · Shift+Enter for newline</div>
+    <div class="hint" id="hint">Tap the box to write · Enter to send</div>
   </div>
+</div>
+
+<!-- Full-screen composer: a single tall textarea scrolls perfectly with the keyboard -->
+<div id="composeView">
+  <div class="cv-bar">
+    <button id="cvCancel" class="cv-btn">Cancel</button>
+    <span class="cv-title" id="cvTitle">Message</span>
+    <div class="cv-right">
+      <button id="cvAttach" class="cv-btn" title="Attach image">📎</button>
+      <button id="cvSend" class="cv-btn cv-send">Send</button>
+    </div>
+  </div>
+  <div class="cv-attach" id="cvAttachments"></div>
+  <textarea id="cvText" placeholder="Message Gemini…"></textarea>
 </div>
 
 <input type="file" id="fileInput" accept="image/*" multiple hidden>
@@ -350,6 +405,7 @@ let pending = [];          // attachments staged in composer: {mime, data(base64
 const $ = s => document.querySelector(s);
 const log = $('#log'), empty = $('#empty'), promptEl = $('#prompt');
 const attachmentsEl = $('#attachments'), sendBtn = $('#sendBtn');
+const composeView = $('#composeView'), cvText = $('#cvText'), cvSend = $('#cvSend');
 
 /* ── Keep the app locked to the visible area (iOS keyboard/notch) ──
    The body is position:fixed, so the document can't scroll and the header
@@ -394,9 +450,11 @@ function setMode(m){
   document.querySelectorAll('#modes button').forEach(b => b.classList.toggle('active', b.dataset.mode===m));
   document.querySelector('#modelRow').classList.toggle('show', m==='image');
   sendBtn.classList.toggle('img', m==='image');
+  cvSend.classList.toggle('img', m==='image');
   promptEl.placeholder = m==='image'
     ? 'Describe an image to generate… (attach a photo to edit it)'
     : 'Message Gemini…';
+  cvText.placeholder = promptEl.placeholder;
   $('#hint').innerHTML = m==='image'
     ? 'Generating with <b>Nano Banana</b> — pick the model above · Enter to send'
     : 'Enter to send · Shift+Enter for newline';
@@ -418,15 +476,41 @@ function addFiles(files){
   });
 }
 function renderAttachments(){
-  attachmentsEl.innerHTML = '';
-  pending.forEach((p, i) => {
-    const t = document.createElement('div');
-    t.className = 'thumb';
-    t.innerHTML = `<img src="${p.url}"><span class="x" data-i="${i}">✕</span>`;
-    t.querySelector('.x').onclick = () => { pending.splice(i,1); renderAttachments(); };
-    attachmentsEl.appendChild(t);
+  [attachmentsEl, $('#cvAttachments')].forEach(container => {
+    container.innerHTML = '';
+    pending.forEach((p, i) => {
+      const t = document.createElement('div');
+      t.className = 'thumb';
+      t.innerHTML = `<img src="${p.url}"><span class="x" data-i="${i}">✕</span>`;
+      t.querySelector('.x').onclick = () => { pending.splice(i,1); renderAttachments(); };
+      container.appendChild(t);
+    });
   });
 }
+
+/* ── Full-screen composer ─────────────────────────────────────── */
+function openCompose(){
+  cvText.value = promptEl.value;
+  cvText.placeholder = promptEl.placeholder;
+  cvSend.classList.toggle('img', mode==='image');
+  composeView.classList.add('show');
+  cvText.focus();
+  const n = cvText.value.length;
+  cvText.setSelectionRange(n, n);
+}
+function closeCompose(save){
+  if(save) promptEl.value = cvText.value;
+  composeView.classList.remove('show');
+}
+promptEl.addEventListener('click', openCompose);   // readonly box → open full-screen
+promptEl.addEventListener('focus', openCompose);
+$('#cvCancel').onclick = () => closeCompose(true);  // keep draft
+$('#cvAttach').onclick = () => $('#fileInput').click();
+cvText.addEventListener('paste', e => {
+  const items = [...(e.clipboardData?.items||[])].filter(i => i.type.startsWith('image/'));
+  if(items.length){ addFiles(items.map(i => i.getAsFile())); }
+});
+cvSend.onclick = () => { promptEl.value = cvText.value; closeCompose(false); send(); };
 
 /* paste image */
 promptEl.addEventListener('paste', e => {
@@ -452,7 +536,7 @@ $('#clearBtn').onclick = () => {
 
 /* chips */
 document.querySelectorAll('#chips .chip').forEach(c => {
-  c.onclick = () => { setMode(c.dataset.mode); promptEl.value = c.textContent; promptEl.focus(); send(); };
+  c.onclick = () => { setMode(c.dataset.mode); promptEl.value = c.textContent; send(); };
 });
 
 /* ── Rendering ────────────────────────────────────────────────── */
@@ -574,7 +658,6 @@ async function send(){
     history.pop();
   } finally {
     sendBtn.disabled = false;
-    promptEl.focus();
   }
 }
 
