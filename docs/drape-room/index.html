@@ -494,9 +494,17 @@
   }
   .ov-selects .ovx { font-family:var(--serif); font-size:1.1rem; color:var(--accent); }
   .ov-msg { color:var(--muted); font-size:0.9rem; margin:0.9rem 0 0; max-width:60ch; }
-  .ov-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(44px, 1fr)); gap:6px; margin-top:1rem; }
+  .ov-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(44px, 1fr)); gap:6px; }
   .ov-sw { aspect-ratio:1; border-radius:9px; box-shadow:inset 0 0 0 1px rgba(0,0,0,0.14); }
-  .ov-refs { display:flex; gap:1.4rem; flex-wrap:wrap; margin-top:1.4rem; padding-top:1.2rem; border-top:1px solid var(--hair); }
+  .ov-group { margin-top:1.4rem; }
+  .ov-group:first-child { margin-top:1rem; }
+  .ov-group-h { display:flex; align-items:center; gap:0.5rem; font-size:0.9rem; font-weight:600; color:var(--ink); margin:0 0 0.6rem; }
+  .ov-badge { width:11px; height:11px; border-radius:50%; flex:0 0 auto; box-shadow:inset 0 0 0 1px rgba(0,0,0,0.12); }
+  .ov-badge.glow { background:var(--good); }
+  .ov-badge.ok { background:var(--accent); }
+  .ov-badge.mixed { background:linear-gradient(90deg, var(--good) 50%, var(--accent) 50%); }
+  .ov-count { font-family:var(--mono); font-size:0.66rem; font-weight:400; color:var(--muted); margin-left:0.35rem; }
+  .ov-refs { display:flex; gap:1.4rem; flex-wrap:wrap; margin-top:1.6rem; padding-top:1.2rem; border-top:1px solid var(--hair); }
   .ov-ref .lab-h { margin:0 0 0.5rem; }
 
   /* ---------- oval cropper ---------- */
@@ -758,7 +766,7 @@
             <select id="ov-c" aria-label="Third season (optional)"></select>
           </div>
           <p class="ov-msg" id="ov-msg">—</p>
-          <div class="ov-grid" id="ov-grid"></div>
+          <div id="ov-groups"></div>
           <div class="ov-refs" id="ov-refs"></div>
         </div>
       </div>
@@ -1630,59 +1638,91 @@
     return best.key;
   }
 
-  // scan color space for colors that fall inside every selected season
+  function capFirst(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
+
+  // scan color space, RATE each color for every selected season, and keep the
+  // ones that don't clash anywhere — then group them by how well they sit with
+  // each season (sings for all / good for one & wearable for another / wearable
+  // for all). This threads the per-trait rating through the shared-colors view.
   function renderOverlap() {
     var keys = [$("ov-a").value, $("ov-b").value, $("ov-c").value].filter(Boolean);
     keys = keys.filter(function (k, i) { return keys.indexOf(k) === i; });   // unique
     var seasons = keys.map(seasonByKey);
 
     if (seasons.length < 2) {
-      $("ov-grid").innerHTML = "";
+      $("ov-groups").innerHTML = "";
       $("ov-refs").innerHTML = "";
       $("ov-msg").textContent = "Pick two different seasons to see the colors you share.";
       return;
     }
 
-    var THRESH = 0.82;
+    var names = seasons.map(function (s) { return s.name; });
+    var joined = names.length === 2 ? names[0] + " and " + names[1]
+      : names.slice(0, -1).join(", ") + ", and " + names[names.length - 1];
+
+    // keep colors that are at least wearable for EVERY selected season
     var found = [];
     for (var h = 0; h < 360; h += 12) {
       [0.30, 0.45, 0.60, 0.78].forEach(function (s) {
         [0.35, 0.48, 0.62, 0.76].forEach(function (l) {
           var hex = rgbToHex(hslToRgb(h, s, l));
-          var a = colorToAxes(hex);
-          var fitsAll = seasons.every(function (se) { return axDist(a, se.t) < THRESH; });
-          if (fitsAll) found.push({ hex: hex, h: h, l: l });
+          var ratings = seasons.map(function (se) { return rateColor(hex, se.key).rating; });
+          if (ratings.indexOf("clash") !== -1) return;    // fights at least one → not shared
+          found.push({ hex: hex, h: h, l: l, sig: ratings.join("|") });
         });
       });
     }
-    found.sort(function (x, y) { return (x.h - y.h) || (x.l - y.l); });
-
-    // cap to an even, readable sample
-    var cap = 32, list = found;
-    if (found.length > cap) {
-      list = [];
-      var step = found.length / cap;
-      for (var i = 0; i < cap; i++) list.push(found[Math.floor(i * step)]);
-    }
-    $("ov-grid").innerHTML = list.map(function (c) {
-      return '<div class="ov-sw" data-hex="' + c.hex + '" tabindex="0" role="button" ' +
-        'aria-label="Explore ' + c.hex.toUpperCase() + '" title="' + c.hex.toUpperCase() + ' — click to explore" ' +
-        'style="background:' + c.hex + '"></div>';
-    }).join("");
-
-    var names = seasons.map(function (s) { return s.name; });
-    var joined = names.length <= 1 ? names[0]
-      : names.length === 2 ? names[0] + " and " + names[1]
-      : names.slice(0, -1).join(", ") + ", and " + names[names.length - 1];
-    var n = found.length, msg;
-    if (n === 0) msg = "Almost nothing flatters " + joined + " — they sit on opposite sides of the color world. Try seasons that are closer cousins.";
-    else if (n < 8) msg = "Only a handful of colors bridge " + joined + " — here they are.";
-    else msg = n + " colors flatter " + joined + " alike — a safe common ground when you're dressing across seasons.";
-    $("ov-msg").textContent = msg;
 
     $("ov-refs").innerHTML = seasons.map(function (s) {
       return '<div class="ov-ref"><p class="lab-h">' + s.name + '</p><div class="mini-pal">' + miniPal(s) + '</div></div>';
     }).join("");
+
+    if (found.length === 0) {
+      $("ov-groups").innerHTML = "";
+      $("ov-msg").textContent = "Almost nothing flatters " + joined + " — they sit on opposite sides of the color world. Try seasons that are closer cousins.";
+      return;
+    }
+
+    // group by rating signature (e.g. "glow|ok")
+    var groups = {};
+    found.forEach(function (c) { (groups[c.sig] = groups[c.sig] || []).push(c); });
+    function glowCount(sig) { return sig.split("|").filter(function (r) { return r === "glow"; }).length; }
+    var sigs = Object.keys(groups).sort(function (a, b) { return glowCount(b) - glowCount(a); });
+
+    function labelFor(sig) {
+      var rs = sig.split("|");
+      if (rs.every(function (r) { return r === "glow"; })) return { text: "Sings for " + names.join(" & "), tone: "glow" };
+      if (rs.every(function (r) { return r === "ok"; })) return { text: "Wearable in " + names.join(" & "), tone: "ok" };
+      var parts = rs.map(function (r, i) { return (r === "glow" ? "sings for " : "wearable for ") + names[i]; });
+      return { text: capFirst(parts.join(" · ")), tone: "mixed" };
+    }
+
+    $("ov-groups").innerHTML = sigs.map(function (sig) {
+      var g = groups[sig];
+      g.sort(function (x, y) { return (x.h - y.h) || (x.l - y.l); });
+      var LIMIT = 24, list = g;
+      if (g.length > LIMIT) {
+        list = [];
+        var step = g.length / LIMIT;
+        for (var i = 0; i < LIMIT; i++) list.push(g[Math.floor(i * step)]);
+      }
+      var lab = labelFor(sig);
+      var sw = list.map(function (c) {
+        return '<div class="ov-sw" data-hex="' + c.hex + '" tabindex="0" role="button" ' +
+          'aria-label="Explore ' + c.hex.toUpperCase() + '" ' +
+          'title="' + c.hex.toUpperCase() + ' — ' + lab.text + '" ' +
+          'style="background:' + c.hex + '"></div>';
+      }).join("");
+      return '<div class="ov-group"><p class="ov-group-h"><span class="ov-badge ' + lab.tone + '"></span>' +
+        lab.text + '<span class="ov-count">' + g.length + '</span></p>' +
+        '<div class="ov-grid">' + sw + '</div></div>';
+    }).join("");
+
+    var singKey = seasons.map(function () { return "glow"; }).join("|");
+    var singN = (groups[singKey] || []).length;
+    $("ov-msg").textContent = singN > 0
+      ? found.length + " colors work across " + joined + " — " + singN + " of them sing for every season (up top); the rest lean to one or are simply wearable."
+      : found.length + " colors are wearable across " + joined + ", though none truly sing for all — the closest sit up top.";
   }
 
   function openLab(from) {
