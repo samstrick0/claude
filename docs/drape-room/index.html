@@ -441,6 +441,17 @@
   .mini-pal { display:flex; gap:5px; margin-top:0.5rem; flex-wrap:wrap; }
   .mini-pal i { width:28px; height:28px; border-radius:7px; box-shadow:inset 0 0 0 1px rgba(0,0,0,0.12); }
 
+  /* any swatch carrying a data-hex is clickable → loads into the Color Lab */
+  [data-hex] { cursor:pointer; }
+  .sw-btn { transition:transform 0.14s ease; }
+  .sw-btn:hover, .sw-btn:focus-visible { transform:scale(1.16); }
+  .ov-sw { transition:transform 0.14s ease; }
+  .ov-sw:hover, .ov-sw:focus-visible { transform:scale(1.16); z-index:1; position:relative; }
+  .shift-sw[data-hex]:hover, .mix-swatch[data-hex]:hover { filter:brightness(1.05); }
+  .sw[data-hex] { transition:filter 0.15s ease; }
+  .sw[data-hex]:hover { filter:brightness(1.06); }
+  .chip[data-hex]:hover { border-color:var(--accent); }
+
   .verdict { display:inline-flex; align-items:center; gap:0.5rem; padding:0.45rem 0.95rem; border-radius:999px; font-size:0.9rem; font-weight:600; }
   .verdict.glow  { background:color-mix(in srgb, var(--good) 20%, transparent); color:var(--good); }
   .verdict.ok    { background:color-mix(in srgb, var(--accent) 20%, transparent); color:var(--accent); }
@@ -742,7 +753,7 @@
         <button class="btn" id="lab-back" type="button">← Back</button>
       </div>
 
-      <p class="footnote">A close, wearable guide, not a verdict — screens and lighting shift color, so trust your eye in daylight for the final call.</p>
+      <p class="footnote">Tip — click any swatch to jump in and explore that color. A close, wearable guide, not a verdict; trust your eye in daylight for the final call.</p>
     </section>
 
   </div>
@@ -1258,6 +1269,10 @@
       el.className = "sw";
       el.style.background = hex;
       el.style.animationDelay = (k * 55) + "ms";
+      el.setAttribute("data-hex", hex);
+      el.setAttribute("role", "button");
+      el.setAttribute("tabindex", "0");
+      el.title = hex.toUpperCase() + " — click to explore in the Color Lab";
       el.innerHTML = '<span>' + hex.toUpperCase() + '</span>';
       wall.appendChild(el);
     });
@@ -1276,6 +1291,10 @@
   function chip(hex, label) {
     var c = document.createElement("span");
     c.className = "chip";
+    c.setAttribute("data-hex", hex);
+    c.setAttribute("role", "button");
+    c.setAttribute("tabindex", "0");
+    c.title = hex.toUpperCase() + " — click to explore in the Color Lab";
     c.innerHTML = '<i style="background:' + hex + '"></i>' + label;
     return c;
   }
@@ -1394,8 +1413,13 @@
     var ca = hexToRgb(a), cb = hexToRgb(b);
     return rgbToHex({ r: ca.r + (cb.r - ca.r) * r, g: ca.g + (cb.g - ca.g) * r, b: ca.b + (cb.b - ca.b) * r });
   }
+  function swBtn(h) {
+    return '<i class="sw-btn" data-hex="' + h + '" tabindex="0" role="button" ' +
+      'aria-label="Explore ' + h.toUpperCase() + '" title="' + h.toUpperCase() + ' — click to explore" ' +
+      'style="background:' + h + '"></i>';
+  }
   function miniPal(s) {
-    return s.pal.slice(0, 6).map(function (h) { return '<i style="background:' + h + '"></i>'; }).join("");
+    return s.pal.slice(0, 6).map(swBtn).join("");
   }
   function sgn(n) { return (n > 0 ? "+" : "") + n; }
 
@@ -1452,8 +1476,12 @@
   function renderShift(hex) {
     var r = shiftToSeason(hex, activeKey());
     $("lab2-from").style.background = hex;
+    $("lab2-from").setAttribute("data-hex", hex);
+    $("lab2-from").title = hex.toUpperCase() + " — click to explore";
     $("lab2-from-hex").textContent = hex.toUpperCase();
     $("lab2-to").style.background = r.hex;
+    $("lab2-to").setAttribute("data-hex", r.hex);
+    $("lab2-to").title = r.hex.toUpperCase() + " — click to explore";
     $("lab2-to-hex").textContent = r.hex.toUpperCase();
     $("lab2-deltas").innerHTML =
       "<span>hue <b>" + sgn(r.dh) + "°</b></span>" +
@@ -1464,6 +1492,8 @@
   function renderMix() {
     var m = mixHex(lab.mixA.get(), lab.mixB.get(), (+$("lab3-ratio").value) / 100);
     $("lab3-out").style.background = m;
+    $("lab3-out").setAttribute("data-hex", m);
+    $("lab3-out").title = m.toUpperCase() + " — click to explore";
     $("lab3-out-hex").textContent = m.toUpperCase();
     var s = classifyColor(m);
     $("lab3-season").textContent = s.name;
@@ -1563,7 +1593,9 @@
       for (var i = 0; i < cap; i++) list.push(found[Math.floor(i * step)]);
     }
     $("ov-grid").innerHTML = list.map(function (c) {
-      return '<div class="ov-sw" title="' + c.hex.toUpperCase() + '" style="background:' + c.hex + '"></div>';
+      return '<div class="ov-sw" data-hex="' + c.hex + '" tabindex="0" role="button" ' +
+        'aria-label="Explore ' + c.hex.toUpperCase() + '" title="' + c.hex.toUpperCase() + ' — click to explore" ' +
+        'style="background:' + c.hex + '"></div>';
     }).join("");
 
     var names = seasons.map(function (s) { return s.name; });
@@ -1598,6 +1630,35 @@
   $("open-lab-intro").addEventListener("click", function () { openLab("s-intro"); });
   $("open-lab-result").addEventListener("click", function () { openLab("s-result"); });
   $("lab-back").addEventListener("click", function () { show(state.labReturn || "s-intro"); });
+
+  // click any swatch to start exploring from that color
+  function loadColorLab(hex) {
+    lab.c1.set(hex);            // → renders "Find its season"
+    lab.c2.set(hex);            // → renders "Shift to fit"
+    selectTab("lab-classify");
+    toast("Exploring " + hex.toUpperCase());
+  }
+  function swatchHandler(e) {
+    if (e.type === "keydown" && e.key !== "Enter" && e.key !== " ") return;
+    var el = e.target.closest("[data-hex]");
+    if (!el) return;
+    e.preventDefault();
+    loadColorLab(el.getAttribute("data-hex"));
+  }
+  $("s-lab").addEventListener("click", swatchHandler);
+  $("s-lab").addEventListener("keydown", swatchHandler);
+
+  // on the result page, a swatch click jumps into the Color Lab with that color
+  function resultSwatchHandler(e) {
+    if (e.type === "keydown" && e.key !== "Enter" && e.key !== " ") return;
+    var el = e.target.closest("[data-hex]");
+    if (!el) return;
+    e.preventDefault();
+    openLab("s-result");
+    loadColorLab(el.getAttribute("data-hex"));
+  }
+  $("s-result").addEventListener("click", resultSwatchHandler);
+  $("s-result").addEventListener("keydown", resultSwatchHandler);
 
   // sensible starting colors
   lab.c1.set("#C0392B");
