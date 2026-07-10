@@ -457,6 +457,18 @@
   .verdict.ok    { background:color-mix(in srgb, var(--accent) 20%, transparent); color:var(--accent); }
   .verdict.clash { background:color-mix(in srgb, var(--bad) 20%, transparent); color:var(--bad); }
 
+  .lab-legend { color:var(--muted); font-size:0.84rem; line-height:1.5; margin:0 0 1.2rem; max-width:66ch; }
+  .lab-legend b { color:var(--ink); font-weight:600; }
+  .traits { display:flex; flex-direction:column; gap:0.55rem; margin:1rem 0 0.4rem; }
+  .trait-row { display:flex; align-items:center; gap:0.7rem; }
+  .trait-ico { width:22px; height:22px; flex:0 0 auto; border-radius:50%; display:grid; place-items:center; font-size:0.78rem; font-weight:700; }
+  .trait-ico.match { background:color-mix(in srgb, var(--good) 22%, transparent); color:var(--good); }
+  .trait-ico.near  { background:color-mix(in srgb, var(--accent) 24%, transparent); color:var(--accent); }
+  .trait-ico.miss  { background:color-mix(in srgb, var(--bad) 22%, transparent); color:var(--bad); }
+  .trait-txt { font-size:0.9rem; }
+  .trait-rank { font-family:var(--mono); font-size:0.58rem; letter-spacing:0.14em; text-transform:uppercase; color:var(--muted); margin-left:auto; white-space:nowrap; padding-left:0.6rem; }
+  .trait-note { color:var(--muted); font-size:0.85rem; margin:1rem 0 0.4rem; padding-top:0.9rem; border-top:1px solid var(--hair); }
+
   .shift-row { display:flex; align-items:center; gap:1rem; flex-wrap:wrap; }
   .shift-sw { width:92px; height:118px; border-radius:12px; box-shadow:inset 0 0 0 1px rgba(0,0,0,0.14); position:relative; overflow:hidden; }
   .shift-sw span { position:absolute; left:0; right:0; bottom:0; font-family:var(--mono); font-size:0.6rem; text-align:center; padding:0.35rem; color:#fff; background:linear-gradient(to top, rgba(0,0,0,0.42), transparent); }
@@ -679,15 +691,17 @@
 
       <!-- Tool 1: classify -->
       <div class="lab-panel on" id="lab-classify" role="tabpanel">
+        <p class="lab-legend">One rule runs every season: a color is rated by how well it matches your three traits — <b>undertone</b>, <b>value</b>, and <b>clarity</b> — weighted by which matters most for you. Match your non-negotiable and it sings; miss it and it fights your face.</p>
         <div class="lab-card">
           <p class="lab-h">Pick a color</p>
           <div class="cc" id="lab1-control"></div>
         </div>
         <div class="lab-card">
-          <p class="lab-h">Where it lands</p>
-          <p style="margin:0 0 0.3rem;">Belongs to <b class="display" id="lab1-name" style="font-size:1.3rem;">—</b></p>
+          <p class="lab-h">How it rates for <span id="lab1-season">your season</span></p>
+          <div style="margin-bottom:0.2rem;"><span class="verdict ok" id="lab1-verdict">—</span></div>
+          <div class="traits" id="lab1-traits"></div>
+          <p class="trait-note">Its natural home is <b id="lab1-name">—</b></p>
           <div class="mini-pal" id="lab1-pal"></div>
-          <div style="margin-top:1.1rem;"><span class="verdict ok" id="lab1-verdict">—</span></div>
         </div>
       </div>
 
@@ -1387,12 +1401,54 @@
     SEASONS.forEach(function (s) { var d = axDist(a, s.t); if (d < bd) { bd = d; best = s; } });
     return best;
   }
-  function verdictFor(hex, key) {
-    var d = axDist(colorToAxes(hex), seasonByKey(key).t);
-    if (d < 0.8) return { cls: "glow", label: "A glow for you" };
-    if (d < 1.45) return { cls: "ok", label: "Wearable — not your best" };
-    return { cls: "clash", label: "Fights your season" };
+  // Which of the three traits leads each season, in order [dominant, secondary].
+  // The third (minor) is whatever's left. axis: 0=undertone 1=value 2=clarity.
+  // Bright/Winter+Spring lead on clarity; Deep/Light lead on value; the
+  // True/Warm/Cool seasons lead on undertone — matching the analysis rule.
+  var TRAIT_RANK = {
+    "bright-spring": [2, 0], "true-spring": [0, 2], "light-spring": [1, 0],
+    "light-summer": [1, 0], "true-summer": [0, 2], "soft-summer": [2, 0],
+    "soft-autumn": [2, 0], "true-autumn": [0, 2], "deep-autumn": [1, 0],
+    "deep-winter": [1, 0], "true-winter": [0, 2], "bright-winter": [2, 0]
+  };
+  function axisMeta(axisIdx, sign) {
+    if (axisIdx === 0) return { trait: "Undertone", need: sign > 0 ? "warmth" : "coolness" };
+    if (axisIdx === 1) return { trait: "Value", need: sign > 0 ? "lightness" : "depth" };
+    return { trait: "Clarity", need: sign > 0 ? "clarity" : "softness" };
   }
+  // does the color satisfy the season's need on one axis?
+  function traitState(axisIdx, season, axes) {
+    var need = season.t[axisIdx];
+    if (Math.abs(need) < 0.12) return "match";           // season is neutral here
+    var m = axes[axisIdx] * (need > 0 ? 1 : -1);          // >0 aligned with the need
+    if (m > 0.06) return "match";
+    if (m > -0.16) return "near";
+    return "miss";
+  }
+  // rate a color for a season: how many traits it matches, weighted by centrality
+  function rateColor(hex, key) {
+    var s = seasonByKey(key), axes = colorToAxes(hex);
+    var rank = TRAIT_RANK[key] || [2, 0];
+    var dom = rank[0], sec = rank[1], ter = 3 - dom - sec;
+    var order = [[dom, "dominant"], [sec, "secondary"], [ter, "minor"]];
+    var st = {};
+    order.forEach(function (o) { st[o[0]] = traitState(o[0], s, axes); });
+    var domSt = st[dom], secSt = st[sec], terSt = st[ter];
+
+    var rating;
+    if (domSt === "miss") rating = "clash";                       // violate the non-negotiable
+    else if (secSt === "miss" && terSt === "miss") rating = "clash";
+    else if (domSt === "near" && secSt === "miss") rating = "clash";
+    else if (domSt === "match" && secSt === "match" && terSt !== "miss") rating = "glow";  // matches all
+    else rating = "ok";                                           // dominant holds, a support slips
+
+    var breakdown = order.map(function (o) {
+      var meta = axisMeta(o[0], s.t[o[0]]);
+      return { trait: meta.trait, need: meta.need, rank: o[1], state: st[o[0]] };
+    });
+    return { rating: rating, breakdown: breakdown };
+  }
+  var RATING_LABEL = { glow: "A glow for you", ok: "Wearable — not your best", clash: "Fights your season" };
   function shiftToSeason(hex, key) {
     var t = seasonByKey(key).t, c = rgbToHsl(hexToRgb(hex));
     var targetS = clamp(0.5 + t[2] * 0.34, 0.1, 0.95);
@@ -1464,14 +1520,30 @@
   var lab = {};
   function activeKey() { return state.labSeason || state.lastSeasonKey || SEASONS[0].key; }
 
+  function traitIcon(stateVal) { return stateVal === "match" ? "✓" : stateVal === "near" ? "≈" : "✗"; }
   function renderClassify(hex) {
+    var key = activeKey(), season = seasonByKey(key);
+    var r = rateColor(hex, key);
+    $("lab1-season").textContent = season.name;
+    var el = $("lab1-verdict");
+    el.className = "verdict " + (r.rating === "glow" ? "glow" : r.rating === "clash" ? "clash" : "ok");
+    el.textContent = RATING_LABEL[r.rating];
+
+    $("lab1-traits").innerHTML = r.breakdown.map(function (b) {
+      var phrase = b.state === "match" ? "brings the " + b.need + " it needs"
+        : b.state === "near" ? "is a little short on " + b.need
+        : "misses the " + b.need + " it needs";
+      var rankLabel = b.rank === "dominant" ? "non-negotiable" : b.rank === "secondary" ? "important" : "minor";
+      return '<div class="trait-row">' +
+        '<span class="trait-ico ' + b.state + '">' + traitIcon(b.state) + '</span>' +
+        '<span class="trait-txt"><b>' + b.trait + '</b> — ' + phrase + '</span>' +
+        '<span class="trait-rank">' + rankLabel + '</span></div>';
+    }).join("");
+
+    // its own natural home (nearest season) for reference
     var s = classifyColor(hex);
     $("lab1-name").textContent = s.name;
     $("lab1-pal").innerHTML = miniPal(s);
-    var v = verdictFor(hex, activeKey());
-    var el = $("lab1-verdict");
-    el.className = "verdict " + v.cls;
-    el.textContent = v.label + " · " + seasonByKey(activeKey()).name;
   }
   function renderShift(hex) {
     var r = shiftToSeason(hex, activeKey());
