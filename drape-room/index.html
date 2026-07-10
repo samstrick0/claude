@@ -1388,12 +1388,39 @@
     return { r: r * 255, g: g * 255, b: b * 255 };
   }
 
-  // map a color to the three seasonal qualities (internal axes)
+  // sRGB → CIELAB (D65) → L*, chroma C*, hue h — perceptual lightness & chroma
+  function rgbToLab(hex) {
+    var c = hexToRgb(hex);
+    function lin(v) { v /= 255; return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }
+    var r = lin(c.r), g = lin(c.g), b = lin(c.b);
+    var X = (r * 0.4124564 + g * 0.3575761 + b * 0.1804375) / 0.95047;
+    var Y = (r * 0.2126729 + g * 0.7151522 + b * 0.0721750);
+    var Z = (r * 0.0193339 + g * 0.1191920 + b * 0.9503041) / 1.08883;
+    function f(t) { return t > 0.008856 ? Math.cbrt(t) : (7.787 * t + 16 / 116); }
+    var fx = f(X), fy = f(Y), fz = f(Z);
+    var L = 116 * fy - 16, a = 500 * (fx - fy), bb = 200 * (fy - fz);
+    return { L: L, C: Math.sqrt(a * a + bb * bb), h: (Math.atan2(bb, a) * 180 / Math.PI + 360) % 360 };
+  }
+  // max attainable chroma per 15° LAB-hue bucket (sRGB gamut) — lets clarity be
+  // judged as "how pure for its own hue", so a teal and a red compare fairly
+  var CMAX_BY_HUE = [85, 93, 105, 97, 85, 86, 97, 102, 118, 120, 87, 67, 55, 50, 45, 44, 48, 57, 72, 106, 134, 121, 110, 91];
+  function chromaRef(h) {
+    var step = 15, pos = h / step, i = Math.floor(pos) % 24, j = (i + 1) % 24, f = pos - Math.floor(pos);
+    return CMAX_BY_HUE[i] * (1 - f) + CMAX_BY_HUE[j] * f;
+  }
+
+  // map a color to the three seasonal qualities (internal axes, each −1..1)
+  //   undertone ← hue (warm/cool)      · unchanged, HSL-hue based
+  //   value     ← CIELAB L*            · perceptual lightness (light/deep)
+  //   clarity   ← hue-fair perceptual chroma (clear/muted)
   function colorToAxes(hex) {
     var c = rgbToHsl(hexToRgb(hex));
+    var lab = rgbToLab(hex);
     var warm = Math.cos((c.h - 50) * Math.PI / 180) * (0.55 + 0.45 * c.s);
-    var val = (c.l - 0.5) * 2;
-    var clar = (c.s - 0.45) / 0.45;
+    var val = (lab.L - 55) / 40;
+    var kL = Math.max(0.30, 1 - Math.abs(lab.L - 55) / 60);   // chroma ceiling drops at light/dark extremes
+    var crel = lab.C / Math.max(1, chromaRef(lab.h) * kL);    // 0..~1, purity for its hue & lightness
+    var clar = (crel - 0.55) * 2.3;
     return [clamp(warm, -1, 1), clamp(val, -1, 1), clamp(clar, -1, 1)];
   }
   function seasonByKey(k) {
@@ -1443,12 +1470,13 @@
     order.forEach(function (o) { st[o[0]] = traitState(o[0], s, axes); });
     var domSt = st[dom], secSt = st[sec], terSt = st[ter];
 
+    // faithful to the rule: violating the non-negotiable (dominant) is the only
+    // thing that makes a color fight your face; matching it caps the worst case
+    // at "wearable", and matching all three makes it sing.
     var rating;
-    if (domSt === "miss") rating = "clash";                       // violate the non-negotiable
-    else if (secSt === "miss" && terSt === "miss") rating = "clash";
-    else if (domSt === "near" && secSt === "miss") rating = "clash";
-    else if (domSt === "match" && secSt === "match" && terSt !== "miss") rating = "glow";  // matches all
-    else rating = "ok";                                           // dominant holds, a support slips
+    if (domSt === "miss") rating = "clash";                                        // violate the dominant → fights
+    else if (domSt === "match" && secSt === "match" && terSt !== "miss") rating = "glow";  // match all three → sings
+    else rating = "ok";                                                            // dominant holds → wearable
 
     var breakdown = order.map(function (o) {
       var meta = axisMeta(o[0], s.t[o[0]]);
