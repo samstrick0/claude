@@ -930,7 +930,7 @@
       neutrals:["#101114","#2A2C30","#F2F4F6"], avoid:["#E29179","#C9A45C","#E8E0D0"] },
     { key:"true-winter", name:"True Winter", tag:"crisp, glacial, high-contrast",
       t:[-0.8,-0.3,0.6], power:{name:"true red",hex:"#E01020"},
-      pal:["#D01A7A","#1E4FD8","#0E8A5F","#E01020","#BFE0EF","#5A2AAE","#0E8AC4","#8A1EC4"],
+      pal:["#D01A7A","#1E4FD8","#0E8A5F","#D8155E","#BFE0EF","#5A2AAE","#0E8AC4","#8A1EC4"],
       neutrals:["#0E0F12","#6B7280","#FCFDFF"], avoid:["#E08A2B","#C9A45C","#9EA36A"] },
     { key:"bright-winter", name:"Bright Winter", tag:"electric, glacial, high-charge",
       t:[-0.4,-0.2,0.9], power:{name:"electric magenta",hex:"#E81E80"},
@@ -1399,7 +1399,7 @@
     function f(t) { return t > 0.008856 ? Math.cbrt(t) : (7.787 * t + 16 / 116); }
     var fx = f(X), fy = f(Y), fz = f(Z);
     var L = 116 * fy - 16, a = 500 * (fx - fy), bb = 200 * (fy - fz);
-    return { L: L, C: Math.sqrt(a * a + bb * bb), h: (Math.atan2(bb, a) * 180 / Math.PI + 360) % 360 };
+    return { L: L, a: a, b: bb, C: Math.sqrt(a * a + bb * bb), h: (Math.atan2(bb, a) * 180 / Math.PI + 360) % 360 };
   }
   // max attainable chroma per 15° LAB-hue bucket (sRGB gamut) — lets clarity be
   // judged as "how pure for its own hue", so a teal and a red compare fairly
@@ -1409,14 +1409,13 @@
     return CMAX_BY_HUE[i] * (1 - f) + CMAX_BY_HUE[j] * f;
   }
 
-  // map a color to the three seasonal qualities (internal axes, each −1..1)
-  //   undertone ← hue (warm/cool)      · unchanged, HSL-hue based
-  //   value     ← CIELAB L*            · perceptual lightness (light/deep)
+  // map a color to the three seasonal qualities (internal axes, each −1..1), all perceptual
+  //   undertone ← CIELAB b* (blue↔yellow)  · warm = yellow-based, cool = blue-based
+  //   value     ← CIELAB L*                · perceptual lightness (light/deep)
   //   clarity   ← hue-fair perceptual chroma (clear/muted)
   function colorToAxes(hex) {
-    var c = rgbToHsl(hexToRgb(hex));
     var lab = rgbToLab(hex);
-    var warm = Math.cos((c.h - 50) * Math.PI / 180) * (0.55 + 0.45 * c.s);
+    var warm = lab.b / 93;                                    // b* is where warm/cool actually lives
     var val = (lab.L - 55) / 40;
     var kL = Math.max(0.30, 1 - Math.abs(lab.L - 55) / 60);   // chroma ceiling drops at light/dark extremes
     var crel = lab.C / Math.max(1, chromaRef(lab.h) * kL);    // 0..~1, purity for its hue & lightness
