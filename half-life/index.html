@@ -96,6 +96,20 @@ select { appearance: none; }
 .schedule-line { font-size: 12px; color: var(--text2); line-height: 1.6; }
 .schedule-line b { color: var(--amber); font-family: var(--mono); }
 
+.day-picker { display: flex; gap: 6px; }
+.day-chip {
+  flex: 1; min-height: 44px; display: flex; align-items: center; justify-content: center;
+  background: var(--s2); border: 1px solid var(--border); border-radius: 10px;
+  color: var(--text2); font-size: 12px; font-weight: 700; font-family: inherit;
+  cursor: pointer;
+}
+.day-chip.active { background: var(--teal); color: #06120f; border-color: var(--teal); }
+input[type=time] {
+  background: var(--s2); border: 1px solid var(--border); color: var(--text);
+  border-radius: 8px; padding: 9px 10px; font-size: 14px; font-family: inherit;
+  min-height: 40px; width: 100%; color-scheme: dark;
+}
+
 /* ── Chart ────────────────────────────────────────────────────── */
 .chart-body { padding: 8px 4px 4px; position: relative; }
 svg { width: 100%; height: auto; display: block; touch-action: none; }
@@ -180,22 +194,21 @@ svg { width: 100%; height: auto; display: block; touch-action: none; }
   <div class="card">
     <div class="card-head">Schedule</div>
     <div class="ctrl-body">
-      <div class="row-2">
-        <div class="row">
-          <div class="label"><b>Gap after dose 1</b><span class="val" id="lbl-gap1">3 d</span></div>
-          <input type="range" id="in-gap1" min="1" max="6" value="3" step="1">
-        </div>
-        <div class="row">
-          <div class="label"><b>Cycle length</b><span class="val" id="lbl-cycle">7 d</span></div>
-          <input type="range" id="in-cycle" min="4" max="10" value="7" step="1">
+      <div class="row">
+        <div class="label"><b>Days taken</b></div>
+        <div class="day-picker" id="day-picker">
+          <button class="day-chip" data-day="0">Mo</button>
+          <button class="day-chip" data-day="1">Tu</button>
+          <button class="day-chip" data-day="2">We</button>
+          <button class="day-chip" data-day="3">Th</button>
+          <button class="day-chip" data-day="4">Fr</button>
+          <button class="day-chip" data-day="5">Sa</button>
+          <button class="day-chip" data-day="6">Su</button>
         </div>
       </div>
       <div class="row">
-        <div class="label"><b>First dose on</b></div>
-        <select id="in-weekday">
-          <option>Monday</option><option>Tuesday</option><option>Wednesday</option>
-          <option>Thursday</option><option>Friday</option><option>Saturday</option><option>Sunday</option>
-        </select>
+        <div class="label"><b>Time of dose</b></div>
+        <input type="time" id="in-time" value="08:00">
       </div>
       <div class="row">
         <div class="label"><b>Weeks to show</b><span class="val" id="lbl-weeks">6</span></div>
@@ -230,10 +243,11 @@ const S = {
   dose: 100,
   model: 'instant',
   absHalflifeHrs: 6,
-  gap1: 3, cycle: 7,
-  weekday: 0,   // 0 = Monday
+  selectedDays: [true, false, false, true, false, false, false],  // Mon, Thu
+  timeOfDay: '08:00',
   weeks: 6,
 };
+const CYCLE = 7;   // weekly repeating schedule
 
 const WEEKDAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
 const WD_SHORT = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
@@ -246,14 +260,20 @@ function halflifeDays() {
 }
 function absHalflifeDays() { return S.absHalflifeHrs / 24; }
 
+function timeOfDayFraction() {
+  const [hh, mm] = S.timeOfDay.split(':').map(Number);
+  return ((hh || 0) + (mm || 0) / 60) / 24;
+}
+
 function buildDoseTimes() {
   const times = [];
-  const gap2 = S.cycle - S.gap1;
+  const frac = timeOfDayFraction();
   for (let w = 0; w < S.weeks; w++) {
-    times.push(w * S.cycle);
-    times.push(w * S.cycle + S.gap1);
+    for (let d = 0; d < 7; d++) {
+      if (S.selectedDays[d]) times.push(w * CYCLE + d + frac);
+    }
   }
-  return { times, gap2 };
+  return times;
 }
 
 // Contribution of a single dose at t_i, evaluated at t >= t_i.
@@ -268,12 +288,12 @@ function contribution(t, ti, ke, ka) {
 }
 
 function simulate() {
-  const { times: doseTimes, gap2 } = buildDoseTimes();
+  const doseTimes = buildDoseTimes();
   const tHalf = halflifeDays();
   const ke = Math.log(2) / tHalf;
   const ka = S.model === 'oral' ? Math.log(2) / absHalflifeDays() : null;
 
-  const totalDays = S.weeks * S.cycle;
+  const totalDays = S.weeks * CYCLE;
   const samples = Math.max(300, Math.min(4000, Math.round(totalDays / 0.04)));
   const dt = totalDays / samples;
 
@@ -291,8 +311,8 @@ function simulate() {
     if (c > ymax) ymax = c;
   }
 
-  // Steady-state window = last full cycle
-  const lastCycleStart = totalDays - S.cycle;
+  // Steady-state window = last full (7-day) cycle
+  const lastCycleStart = totalDays - CYCLE;
   let ssMax = -Infinity, ssMin = Infinity;
   for (let i = 0; i <= samples; i++) {
     if (xs[i] >= lastCycleStart) {
@@ -300,15 +320,18 @@ function simulate() {
       if (ys[i] < ssMin) ssMin = ys[i];
     }
   }
+  if (doseTimes.length === 0) { ssMax = 0; ssMin = 0; }
 
-  // First-dose peak (within [0, gap1])
+  // First-dose peak (within the first inter-dose interval)
+  const firstWindowEnd = doseTimes.length > 1 ? doseTimes[1] : (doseTimes[0] || 0) + CYCLE;
   let firstPeak = -Infinity;
   for (let i = 0; i <= samples; i++) {
-    if (xs[i] <= S.gap1 && ys[i] > firstPeak) firstPeak = ys[i];
-    if (xs[i] > S.gap1) break;
+    if (xs[i] <= firstWindowEnd && ys[i] > firstPeak) firstPeak = ys[i];
+    if (xs[i] > firstWindowEnd) break;
   }
+  if (firstPeak === -Infinity) firstPeak = 0;
 
-  return { xs, ys, ymax, doseTimes, gap2, totalDays, ssMax, ssMin, firstPeak, tHalf };
+  return { xs, ys, ymax, doseTimes, totalDays, ssMax, ssMin, firstPeak, tHalf };
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -327,9 +350,7 @@ function fmt(n) {
 }
 
 function dayLabel(day) {
-  const cycle = S.cycle;
-  const wd = WD_SHORT[((S.weekday + Math.round(day)) % 7 + 7) % 7];
-  return cycle === 7 ? wd : `d${Math.round(day)}`;
+  return WD_SHORT[((Math.floor(day) % 7) + 7) % 7];
 }
 
 function render() {
@@ -361,7 +382,7 @@ function render() {
   for (let d = 0; d <= totalDays; d += tickStep) {
     const x = X(d);
     svgHtml += `<line class="gridline" x1="${x}" y1="${y0}" x2="${x}" y2="${y0 + 4}"/>`;
-    if (S.cycle === 7 && tickStep === 1) {
+    if (tickStep === 1) {
       svgHtml += `<text class="axis-text-wk" x="${x}" y="${y0 + 15}" text-anchor="middle">${dayLabel(d)}</text>`;
     } else {
       svgHtml += `<text class="axis-text" x="${x}" y="${y0 + 15}" text-anchor="middle">${Math.round(d)}</text>`;
@@ -430,7 +451,7 @@ function wireHover(sim, x0, x1, y0, y1, yTop, totalDays) {
     chLine.setAttribute('x1', xPix); chLine.setAttribute('x2', xPix);
     chDot.setAttribute('cx', xPix); chDot.setAttribute('cy', yPix);
 
-    const wd = S.cycle === 7 ? ` (${dayLabel(sim.xs[idx])})` : '';
+    const wd = ` (${dayLabel(sim.xs[idx])})`;
     tooltip.innerHTML = `<span class="t-day">Day ${sim.xs[idx].toFixed(1)}${wd}</span><br>Conc: ${fmt(cVal)} units`;
     tooltip.classList.add('show');
     const chartBody = svg.parentElement;
@@ -455,7 +476,7 @@ function wireHover(sim, x0, x1, y0, y1, yTop, totalDays) {
 }
 
 function renderStats(sim) {
-  const { ssMax, ssMin, firstPeak, tHalf, gap2 } = sim;
+  const { ssMax, ssMin, firstPeak, tHalf } = sim;
   const rac = firstPeak > 0 ? ssMax / firstPeak : 1;
   const t90 = 3.3 * tHalf;
   const t97 = 4.9 * tHalf;
@@ -491,27 +512,36 @@ function renderStats(sim) {
 //  UI WIRING
 // ════════════════════════════════════════════════════════════════
 function updateScheduleSummary() {
-  const gap2 = S.cycle - S.gap1;
-  const wd1 = WEEKDAYS[S.weekday];
-  const wd2 = WEEKDAYS[(S.weekday + S.gap1) % 7];
-  document.getElementById('schedule-summary').innerHTML =
-    `Dose on <b>${wd1}</b>, then <b>${S.gap1}d</b> later on <b>${wd2}</b>, then <b>${gap2}d</b> back to ${wd1}. Cycle repeats every ${S.cycle} days.`;
+  const idxs = S.selectedDays.map((v, i) => v ? i : -1).filter(i => i >= 0).sort((a, b) => a - b);
+  const el = document.getElementById('schedule-summary');
+  if (idxs.length === 0) {
+    el.innerHTML = 'Select at least one day.';
+    return;
+  }
+  if (idxs.length === 1) {
+    el.innerHTML = `Dose every <b>${WEEKDAYS[idxs[0]]}</b> (weekly).`;
+    return;
+  }
+  let chain = '';
+  for (let k = 0; k < idxs.length; k++) {
+    const cur = idxs[k];
+    const next = idxs[(k + 1) % idxs.length];
+    const gap = next > cur ? next - cur : (7 - cur) + next;
+    chain += `<b>${WD_SHORT[cur]}</b> <span style="color:var(--text2)">→ ${gap}d →</span> `;
+  }
+  chain += `<b>${WD_SHORT[idxs[0]]}</b> <span style="color:var(--text2)">(repeats)</span>`;
+  el.innerHTML = chain;
 }
 
 function syncLabels() {
   document.getElementById('lbl-halflife').textContent = `${S.halflifeVal} ${S.halflifeUnit}`;
   document.getElementById('lbl-dose').textContent = `${S.dose} units`;
   document.getElementById('lbl-abs').textContent = `${S.absHalflifeHrs} hours`;
-  document.getElementById('lbl-gap1').textContent = `${S.gap1} d`;
-  document.getElementById('lbl-cycle').textContent = `${S.cycle} d`;
   document.getElementById('lbl-weeks').textContent = `${S.weeks}`;
+  document.querySelectorAll('#day-picker .day-chip').forEach(btn => {
+    btn.classList.toggle('active', S.selectedDays[+btn.dataset.day]);
+  });
   updateScheduleSummary();
-}
-
-function clampGap1() {
-  if (S.gap1 >= S.cycle) S.gap1 = S.cycle - 1;
-  document.getElementById('in-gap1').max = S.cycle - 1;
-  document.getElementById('in-gap1').value = S.gap1;
 }
 
 document.getElementById('in-halflife-val').addEventListener('input', e => {
@@ -527,14 +557,17 @@ document.getElementById('in-dose').addEventListener('input', e => {
 document.getElementById('in-abs').addEventListener('input', e => {
   S.absHalflifeHrs = parseFloat(e.target.value); syncLabels(); render();
 });
-document.getElementById('in-gap1').addEventListener('input', e => {
-  S.gap1 = parseInt(e.target.value, 10); syncLabels(); render();
+document.getElementById('day-picker').addEventListener('click', e => {
+  const btn = e.target.closest('.day-chip');
+  if (!btn) return;
+  const day = +btn.dataset.day;
+  const activeCount = S.selectedDays.filter(Boolean).length;
+  if (S.selectedDays[day] && activeCount === 1) return;  // keep at least one day selected
+  S.selectedDays[day] = !S.selectedDays[day];
+  syncLabels(); render();
 });
-document.getElementById('in-cycle').addEventListener('input', e => {
-  S.cycle = parseInt(e.target.value, 10); clampGap1(); syncLabels(); render();
-});
-document.getElementById('in-weekday').addEventListener('change', e => {
-  S.weekday = e.target.selectedIndex; syncLabels(); render();
+document.getElementById('in-time').addEventListener('input', e => {
+  S.timeOfDay = e.target.value || '00:00'; render();
 });
 document.getElementById('in-weeks').addEventListener('input', e => {
   S.weeks = parseInt(e.target.value, 10); syncLabels(); render();
