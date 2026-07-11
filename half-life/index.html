@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Half-Life Dosing Curve</title>
+<style>
+:root {
+  --bg:       #09090f;
+  --s1:       #111119;
+  --s2:       #17171f;
+  --border:   #252535;
+  --teal:     #3ecfb8;
+  --violet:   #9b8dff;
+  --amber:    #f0a030;
+  --green:    #3fbf72;
+  --red:      #e05252;
+  --text:     #dde0ec;
+  --text2:    #7a7a9a;
+  --mono:     'SF Mono', 'Menlo', 'Courier New', monospace;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+html, body { height: 100%; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  padding: 24px 16px 48px;
+}
+.wrap { max-width: 720px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
+
+.wordmark { text-align: center; margin-bottom: 4px; }
+.wordmark h1 {
+  font-size: 19px; font-weight: 700; letter-spacing: 0.06em;
+  text-transform: uppercase; color: var(--teal);
+}
+.wordmark p { margin-top: 6px; font-size: 13px; color: var(--text2); line-height: 1.6; }
+
+.card {
+  background: var(--s1);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  overflow: hidden;
+}
+.card.chart-card { overflow: visible; }
+.card-head {
+  background: var(--s2);
+  padding: 11px 14px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  color: var(--text2);
+  border-bottom: 1px solid var(--border);
+}
+
+/* ── Controls ─────────────────────────────────────────────────── */
+.ctrl-body { padding: 14px; display: flex; flex-direction: column; gap: 14px; }
+.row { display: flex; flex-direction: column; gap: 6px; }
+.row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.label { font-size: 12px; color: var(--text2); display: flex; justify-content: space-between; align-items: baseline; }
+.label b { color: var(--text); font-weight: 600; }
+.label .val { font-family: var(--mono); color: var(--teal); font-size: 12px; }
+input[type=range] {
+  -webkit-appearance: none; width: 100%; height: 4px; border-radius: 2px;
+  background: var(--border); outline: none;
+}
+input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none; width: 18px; height: 18px; border-radius: 50%;
+  background: var(--teal); cursor: pointer; border: 2px solid var(--s1);
+}
+input[type=range]::-moz-range-thumb {
+  width: 18px; height: 18px; border-radius: 50%; background: var(--teal);
+  cursor: pointer; border: 2px solid var(--s1);
+}
+input[type=number], select {
+  background: var(--s2); border: 1px solid var(--border); color: var(--text);
+  border-radius: 8px; padding: 9px 10px; font-size: 14px; font-family: inherit;
+  min-height: 40px; width: 100%;
+}
+select { appearance: none; }
+.unit-group { display: flex; gap: 8px; }
+.unit-group input[type=number] { flex: 1; }
+.unit-group select { flex: 0 0 92px; }
+
+.seg { display: flex; border: 1px solid var(--border); border-radius: 9px; overflow: hidden; }
+.seg button {
+  flex: 1; background: var(--s2); border: none; color: var(--text2);
+  padding: 9px 8px; font-size: 13px; font-family: inherit; cursor: pointer;
+  min-height: 40px;
+}
+.seg button + button { border-left: 1px solid var(--border); }
+.seg button.active { background: var(--teal); color: #06120f; font-weight: 700; }
+
+.schedule-line { font-size: 12px; color: var(--text2); line-height: 1.6; }
+.schedule-line b { color: var(--amber); font-family: var(--mono); }
+
+/* ── Chart ────────────────────────────────────────────────────── */
+.chart-body { padding: 8px 4px 4px; position: relative; }
+svg { width: 100%; height: auto; display: block; touch-action: none; }
+.gridline { stroke: var(--border); stroke-width: 1; }
+.axis-text { fill: var(--text2); font-size: 10px; font-family: var(--mono); }
+.axis-text-wk { fill: var(--text2); font-size: 9px; }
+.curve { fill: none; stroke: var(--teal); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.dose-tick { stroke: var(--amber); stroke-width: 2; }
+.dose-dot { fill: var(--amber); }
+.ss-dot { fill: var(--violet); stroke: var(--bg); stroke-width: 1.5; }
+.ss-line { stroke: var(--violet); stroke-width: 1; stroke-dasharray: 3 4; opacity: .7; }
+.crosshair-line { stroke: var(--text2); stroke-width: 1; stroke-dasharray: 2 3; pointer-events: none; }
+.crosshair-dot { fill: var(--teal); stroke: var(--bg); stroke-width: 1.5; pointer-events: none; }
+.direct-label { fill: var(--text); font-size: 10px; font-family: var(--mono); }
+.direct-label-sub { fill: var(--text2); font-size: 9px; }
+
+.tooltip {
+  position: absolute; pointer-events: none; background: var(--s2);
+  border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px;
+  font-size: 12px; line-height: 1.5; color: var(--text); white-space: nowrap;
+  transform: translate(-50%, -110%); opacity: 0; transition: opacity .1s;
+  font-family: var(--mono); z-index: 5;
+}
+.tooltip .t-day { color: var(--teal); font-weight: 700; }
+.tooltip.show { opacity: 1; }
+
+/* ── Stats ────────────────────────────────────────────────────── */
+.stats-body { display: flex; flex-wrap: wrap; }
+.stat {
+  flex: 1 1 45%; padding: 12px 14px; border-bottom: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+}
+.stat:nth-child(even) { border-right: none; }
+.stat-label { font-size: 10px; text-transform: uppercase; letter-spacing: .06em; color: var(--text2); margin-bottom: 4px; }
+.stat-val { font-size: 17px; font-weight: 700; font-family: var(--mono); color: var(--teal); }
+.stat-sub { font-size: 11px; color: var(--text2); margin-top: 2px; }
+
+.note {
+  padding: 12px 14px; font-size: 11.5px; color: var(--text2); line-height: 1.7;
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="wordmark">
+    <h1>Half-Life Dosing Curve</h1>
+    <p>Simulated drug concentration for a twice-weekly schedule with uneven gaps between doses (e.g. 3 days, then 4 days — Monday / Thursday).</p>
+  </div>
+
+  <div class="card">
+    <div class="card-head">Drug</div>
+    <div class="ctrl-body">
+      <div class="row">
+        <div class="label"><b>Half-life</b><span class="val" id="lbl-halflife">2 days</span></div>
+        <div class="unit-group">
+          <input type="number" id="in-halflife-val" value="2" min="0.01" step="0.1">
+          <select id="in-halflife-unit">
+            <option value="hours">hours</option>
+            <option value="days" selected>days</option>
+          </select>
+        </div>
+      </div>
+      <div class="row">
+        <div class="label"><b>Dose amount</b><span class="val" id="lbl-dose">100 units</span></div>
+        <input type="range" id="in-dose" min="1" max="500" value="100" step="1">
+      </div>
+      <div class="row">
+        <div class="label"><b>Absorption</b></div>
+        <div class="seg" id="seg-model">
+          <button data-model="instant" class="active">Instant (IV / SC bolus)</button>
+          <button data-model="oral">Oral (absorption phase)</button>
+        </div>
+      </div>
+      <div class="row" id="row-absorption" style="display:none;">
+        <div class="label"><b>Absorption half-life</b><span class="val" id="lbl-abs">6 hours</span></div>
+        <input type="range" id="in-abs" min="0.5" max="48" value="6" step="0.5">
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-head">Schedule</div>
+    <div class="ctrl-body">
+      <div class="row-2">
+        <div class="row">
+          <div class="label"><b>Gap after dose 1</b><span class="val" id="lbl-gap1">3 d</span></div>
+          <input type="range" id="in-gap1" min="1" max="6" value="3" step="1">
+        </div>
+        <div class="row">
+          <div class="label"><b>Cycle length</b><span class="val" id="lbl-cycle">7 d</span></div>
+          <input type="range" id="in-cycle" min="4" max="10" value="7" step="1">
+        </div>
+      </div>
+      <div class="row">
+        <div class="label"><b>First dose on</b></div>
+        <select id="in-weekday">
+          <option>Monday</option><option>Tuesday</option><option>Wednesday</option>
+          <option>Thursday</option><option>Friday</option><option>Saturday</option><option>Sunday</option>
+        </select>
+      </div>
+      <div class="row">
+        <div class="label"><b>Weeks to show</b><span class="val" id="lbl-weeks">6</span></div>
+        <input type="range" id="in-weeks" min="2" max="12" value="6" step="1">
+      </div>
+      <div class="schedule-line" id="schedule-summary"></div>
+    </div>
+  </div>
+
+  <div class="card chart-card">
+    <div class="card-head">Concentration over time</div>
+    <div class="chart-body">
+      <svg id="chart" viewBox="0 0 900 380" preserveAspectRatio="xMidYMid meet"></svg>
+      <div class="tooltip" id="tooltip"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-head">Steady state</div>
+    <div class="stats-body" id="stats"></div>
+    <div class="note" id="note"></div>
+  </div>
+
+</div>
+
+<script>
+// ════════════════════════════════════════════════════════════════
+//  STATE
+// ════════════════════════════════════════════════════════════════
+const S = {
+  halflifeVal: 2, halflifeUnit: 'days',
+  dose: 100,
+  model: 'instant',
+  absHalflifeHrs: 6,
+  gap1: 3, cycle: 7,
+  weekday: 0,   // 0 = Monday
+  weeks: 6,
+};
+
+const WEEKDAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+const WD_SHORT = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+
+// ════════════════════════════════════════════════════════════════
+//  PK MATH
+// ════════════════════════════════════════════════════════════════
+function halflifeDays() {
+  return S.halflifeUnit === 'hours' ? S.halflifeVal / 24 : S.halflifeVal;
+}
+function absHalflifeDays() { return S.absHalflifeHrs / 24; }
+
+function buildDoseTimes() {
+  const times = [];
+  const gap2 = S.cycle - S.gap1;
+  for (let w = 0; w < S.weeks; w++) {
+    times.push(w * S.cycle);
+    times.push(w * S.cycle + S.gap1);
+  }
+  return { times, gap2 };
+}
+
+// Contribution of a single dose at t_i, evaluated at t >= t_i.
+function contribution(t, ti, ke, ka) {
+  const dt = t - ti;
+  if (dt < 0) return 0;
+  if (S.model === 'instant') return S.dose * Math.exp(-ke * dt);
+  if (Math.abs(ka - ke) < 1e-6) {
+    return S.dose * ke * dt * Math.exp(-ke * dt);
+  }
+  return S.dose * (ka / (ka - ke)) * (Math.exp(-ke * dt) - Math.exp(-ka * dt));
+}
+
+function simulate() {
+  const { times: doseTimes, gap2 } = buildDoseTimes();
+  const tHalf = halflifeDays();
+  const ke = Math.log(2) / tHalf;
+  const ka = S.model === 'oral' ? Math.log(2) / absHalflifeDays() : null;
+
+  const totalDays = S.weeks * S.cycle;
+  const samples = Math.max(300, Math.min(4000, Math.round(totalDays / 0.04)));
+  const dt = totalDays / samples;
+
+  const xs = new Array(samples + 1);
+  const ys = new Array(samples + 1);
+  let ymax = 0;
+  for (let i = 0; i <= samples; i++) {
+    const t = i * dt;
+    let c = 0;
+    for (const ti of doseTimes) {
+      if (ti > t) break;
+      c += contribution(t, ti, ke, ka);
+    }
+    xs[i] = t; ys[i] = c;
+    if (c > ymax) ymax = c;
+  }
+
+  // Steady-state window = last full cycle
+  const lastCycleStart = totalDays - S.cycle;
+  let ssMax = -Infinity, ssMin = Infinity;
+  for (let i = 0; i <= samples; i++) {
+    if (xs[i] >= lastCycleStart) {
+      if (ys[i] > ssMax) ssMax = ys[i];
+      if (ys[i] < ssMin) ssMin = ys[i];
+    }
+  }
+
+  // First-dose peak (within [0, gap1])
+  let firstPeak = -Infinity;
+  for (let i = 0; i <= samples; i++) {
+    if (xs[i] <= S.gap1 && ys[i] > firstPeak) firstPeak = ys[i];
+    if (xs[i] > S.gap1) break;
+  }
+
+  return { xs, ys, ymax, doseTimes, gap2, totalDays, ssMax, ssMin, firstPeak, tHalf };
+}
+
+// ════════════════════════════════════════════════════════════════
+//  RENDER — CHART
+// ════════════════════════════════════════════════════════════════
+const svg = document.getElementById('chart');
+const tooltip = document.getElementById('tooltip');
+const PAD = { l: 44, r: 14, t: 16, b: 34 };
+const W = 900, H = 380;
+let lastSim = null;
+
+function fmt(n) {
+  if (n >= 100) return n.toFixed(0);
+  if (n >= 10) return n.toFixed(1);
+  return n.toFixed(2);
+}
+
+function dayLabel(day) {
+  const cycle = S.cycle;
+  const wd = WD_SHORT[((S.weekday + Math.round(day)) % 7 + 7) % 7];
+  return cycle === 7 ? wd : `d${Math.round(day)}`;
+}
+
+function render() {
+  const sim = simulate();
+  lastSim = sim;
+  const { xs, ys, ymax, doseTimes, totalDays, ssMax, ssMin, firstPeak, tHalf } = sim;
+
+  const x0 = PAD.l, x1 = W - PAD.r, y0 = H - PAD.b, y1 = PAD.t;
+  const yTop = ymax * 1.12 || 1;
+  const X = d => x0 + (d / totalDays) * (x1 - x0);
+  const Y = v => y0 - (v / yTop) * (y0 - y1);
+
+  let svgHtml = '';
+
+  // gridlines (y)
+  const yTicks = 4;
+  for (let i = 0; i <= yTicks; i++) {
+    const v = (yTop / yTicks) * i;
+    const y = Y(v);
+    svgHtml += `<line class="gridline" x1="${x0}" y1="${y}" x2="${x1}" y2="${y}"/>`;
+    svgHtml += `<text class="axis-text" x="${x0 - 8}" y="${y + 3}" text-anchor="end">${fmt(v)}</text>`;
+  }
+
+  // x ticks
+  let tickStep = 1;
+  if (totalDays > 70) tickStep = 7;
+  else if (totalDays > 42) tickStep = 3;
+  else if (totalDays > 21) tickStep = 2;
+  for (let d = 0; d <= totalDays; d += tickStep) {
+    const x = X(d);
+    svgHtml += `<line class="gridline" x1="${x}" y1="${y0}" x2="${x}" y2="${y0 + 4}"/>`;
+    if (S.cycle === 7 && tickStep === 1) {
+      svgHtml += `<text class="axis-text-wk" x="${x}" y="${y0 + 15}" text-anchor="middle">${dayLabel(d)}</text>`;
+    } else {
+      svgHtml += `<text class="axis-text" x="${x}" y="${y0 + 15}" text-anchor="middle">${Math.round(d)}</text>`;
+    }
+  }
+  svgHtml += `<text class="axis-text" x="${(x0+x1)/2}" y="${H - 4}" text-anchor="middle" style="fill:var(--text2)">Day</text>`;
+
+  // steady-state reference lines
+  svgHtml += `<line class="ss-line" x1="${x0}" y1="${Y(ssMax)}" x2="${x1}" y2="${Y(ssMax)}"/>`;
+  svgHtml += `<line class="ss-line" x1="${x0}" y1="${Y(ssMin)}" x2="${x1}" y2="${Y(ssMin)}"/>`;
+  svgHtml += `<text class="direct-label-sub" x="${x1}" y="${Y(ssMax) - 5}" text-anchor="end">Css max ${fmt(ssMax)}</text>`;
+  svgHtml += `<text class="direct-label-sub" x="${x1}" y="${Y(ssMin) - 5}" text-anchor="end">Css min ${fmt(ssMin)}</text>`;
+
+  // dose ticks
+  doseTimes.forEach((ti, idx) => {
+    const x = X(ti);
+    svgHtml += `<line class="dose-tick" x1="${x}" y1="${y0}" x2="${x}" y2="${y0 + 8}"/>`;
+    svgHtml += `<circle class="dose-dot" cx="${x}" cy="${y0 + 8}" r="2.5"/>`;
+  });
+
+  // curve
+  let d = '';
+  for (let i = 0; i < xs.length; i++) {
+    const cmd = i === 0 ? 'M' : 'L';
+    d += `${cmd}${X(xs[i]).toFixed(1)},${Y(ys[i]).toFixed(1)} `;
+  }
+  svgHtml += `<path class="curve" d="${d}"/>`;
+
+  // crosshair group (updated on hover)
+  svgHtml += `<g id="crosshair" style="display:none;">
+      <line class="crosshair-line" id="ch-line" x1="0" y1="${y1}" x2="0" y2="${y0}"/>
+      <circle class="crosshair-dot" id="ch-dot" r="4"/>
+    </g>`;
+  // hit layer
+  svgHtml += `<rect id="hit" x="${x0}" y="${y1}" width="${x1-x0}" height="${y0-y1}" fill="transparent"/>`;
+
+  svg.innerHTML = svgHtml;
+
+  wireHover(sim, x0, x1, y0, y1, yTop, totalDays);
+  renderStats(sim);
+}
+
+function wireHover(sim, x0, x1, y0, y1, yTop, totalDays) {
+  const hit = document.getElementById('hit');
+  const crosshair = document.getElementById('crosshair');
+  const chLine = document.getElementById('ch-line');
+  const chDot = document.getElementById('ch-dot');
+
+  function pos(evt) {
+    const rect = svg.getBoundingClientRect();
+    const clientX = evt.touches ? evt.touches[0].clientX : evt.clientX;
+    const clientY = evt.touches ? evt.touches[0].clientY : evt.clientY;
+    const sx = ((clientX - rect.left) / rect.width) * W;
+    return { sx, rect };
+  }
+
+  function onMove(evt) {
+    const { sx, rect } = pos(evt);
+    const day = Math.max(0, Math.min(totalDays, ((sx - x0) / (x1 - x0)) * totalDays));
+    const idx = Math.round((day / totalDays) * (sim.xs.length - 1));
+    const cVal = sim.ys[idx];
+    const xPix = x0 + (sim.xs[idx] / totalDays) * (x1 - x0);
+    const yPix = y0 - (cVal / yTop) * (y0 - y1);
+
+    crosshair.style.display = '';
+    chLine.setAttribute('x1', xPix); chLine.setAttribute('x2', xPix);
+    chDot.setAttribute('cx', xPix); chDot.setAttribute('cy', yPix);
+
+    const wd = S.cycle === 7 ? ` (${dayLabel(sim.xs[idx])})` : '';
+    tooltip.innerHTML = `<span class="t-day">Day ${sim.xs[idx].toFixed(1)}${wd}</span><br>Conc: ${fmt(cVal)} units`;
+    tooltip.classList.add('show');
+    const chartBody = svg.parentElement;
+    const bodyRect = chartBody.getBoundingClientRect();
+    const svgOffsetLeft = rect.left - bodyRect.left;
+    const svgOffsetTop = rect.top - bodyRect.top;
+    const leftPx = (xPix / W) * rect.width + svgOffsetLeft;
+    const halfTip = tooltip.offsetWidth / 2 || 60;
+    const clampedLeft = Math.min(Math.max(leftPx, halfTip + 2), chartBody.clientWidth - halfTip - 2);
+    tooltip.style.left = clampedLeft + 'px';
+    tooltip.style.top = ((yPix / H) * rect.height + svgOffsetTop) + 'px';
+  }
+  function onLeave() {
+    crosshair.style.display = 'none';
+    tooltip.classList.remove('show');
+  }
+
+  hit.addEventListener('mousemove', onMove);
+  hit.addEventListener('mouseleave', onLeave);
+  hit.addEventListener('touchmove', e => { onMove(e); e.preventDefault(); }, { passive: false });
+  hit.addEventListener('touchend', onLeave);
+}
+
+function renderStats(sim) {
+  const { ssMax, ssMin, firstPeak, tHalf, gap2 } = sim;
+  const rac = firstPeak > 0 ? ssMax / firstPeak : 1;
+  const t90 = 3.3 * tHalf;
+  const t97 = 4.9 * tHalf;
+  document.getElementById('stats').innerHTML = `
+    <div class="stat">
+      <div class="stat-label">Steady-state peak</div>
+      <div class="stat-val">${fmt(ssMax)}</div>
+      <div class="stat-sub">just after a dose</div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">Steady-state trough</div>
+      <div class="stat-val">${fmt(ssMin)}</div>
+      <div class="stat-sub">right before the next dose</div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">Accumulation ratio</div>
+      <div class="stat-val">${rac.toFixed(2)}×</div>
+      <div class="stat-sub">steady-state peak ÷ first-dose peak</div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">≈ time to steady state</div>
+      <div class="stat-val">${t90.toFixed(1)}–${t97.toFixed(1)} d</div>
+      <div class="stat-sub">~90–97% plateau, ≈3.3–4.9 half-lives</div>
+    </div>
+  `;
+  document.getElementById('note').textContent =
+    `Single-compartment, first-order elimination model, doses superimposed linearly. `+
+    `Real drug levels depend on absorption rate, distribution volume, individual metabolism, `+
+    `renal/hepatic function, food, and formulation — this is an idealized teaching curve, not a prediction for any real medication or a substitute for medical guidance.`;
+}
+
+// ════════════════════════════════════════════════════════════════
+//  UI WIRING
+// ════════════════════════════════════════════════════════════════
+function updateScheduleSummary() {
+  const gap2 = S.cycle - S.gap1;
+  const wd1 = WEEKDAYS[S.weekday];
+  const wd2 = WEEKDAYS[(S.weekday + S.gap1) % 7];
+  document.getElementById('schedule-summary').innerHTML =
+    `Dose on <b>${wd1}</b>, then <b>${S.gap1}d</b> later on <b>${wd2}</b>, then <b>${gap2}d</b> back to ${wd1}. Cycle repeats every ${S.cycle} days.`;
+}
+
+function syncLabels() {
+  document.getElementById('lbl-halflife').textContent = `${S.halflifeVal} ${S.halflifeUnit}`;
+  document.getElementById('lbl-dose').textContent = `${S.dose} units`;
+  document.getElementById('lbl-abs').textContent = `${S.absHalflifeHrs} hours`;
+  document.getElementById('lbl-gap1').textContent = `${S.gap1} d`;
+  document.getElementById('lbl-cycle').textContent = `${S.cycle} d`;
+  document.getElementById('lbl-weeks').textContent = `${S.weeks}`;
+  updateScheduleSummary();
+}
+
+function clampGap1() {
+  if (S.gap1 >= S.cycle) S.gap1 = S.cycle - 1;
+  document.getElementById('in-gap1').max = S.cycle - 1;
+  document.getElementById('in-gap1').value = S.gap1;
+}
+
+document.getElementById('in-halflife-val').addEventListener('input', e => {
+  S.halflifeVal = Math.max(0.01, parseFloat(e.target.value) || 0.01);
+  syncLabels(); render();
+});
+document.getElementById('in-halflife-unit').addEventListener('change', e => {
+  S.halflifeUnit = e.target.value; syncLabels(); render();
+});
+document.getElementById('in-dose').addEventListener('input', e => {
+  S.dose = parseFloat(e.target.value); syncLabels(); render();
+});
+document.getElementById('in-abs').addEventListener('input', e => {
+  S.absHalflifeHrs = parseFloat(e.target.value); syncLabels(); render();
+});
+document.getElementById('in-gap1').addEventListener('input', e => {
+  S.gap1 = parseInt(e.target.value, 10); syncLabels(); render();
+});
+document.getElementById('in-cycle').addEventListener('input', e => {
+  S.cycle = parseInt(e.target.value, 10); clampGap1(); syncLabels(); render();
+});
+document.getElementById('in-weekday').addEventListener('change', e => {
+  S.weekday = e.target.selectedIndex; syncLabels(); render();
+});
+document.getElementById('in-weeks').addEventListener('input', e => {
+  S.weeks = parseInt(e.target.value, 10); syncLabels(); render();
+});
+document.getElementById('seg-model').addEventListener('click', e => {
+  const btn = e.target.closest('button');
+  if (!btn) return;
+  S.model = btn.dataset.model;
+  document.querySelectorAll('#seg-model button').forEach(b => b.classList.toggle('active', b === btn));
+  document.getElementById('row-absorption').style.display = S.model === 'oral' ? '' : 'none';
+  render();
+});
+
+syncLabels();
+render();
+window.addEventListener('resize', render);
+</script>
+</body>
+</html>
