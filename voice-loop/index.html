@@ -72,7 +72,7 @@
     font-weight: 800;
     letter-spacing: 0.8px;
     color: #1a1526;
-    background: #ff9e80;   /* v12 */
+    background: #6ee7d8;   /* v13 */
   }
 
   /* --- tab bar --- */
@@ -459,7 +459,7 @@
   <header>
     <h1>Voice Loop</h1>
     <p>Hands-free voice practice — pitch · resonance · weight</p>
-    <div class="version" id="version">v12</div>
+    <div class="version" id="version">v13</div>
   </header>
 
   <nav class="tabs" id="tabs">
@@ -524,7 +524,7 @@
                guaranteed path. Bad picks fail gracefully at decode. -->
           <input type="file" id="shFile" accept="audio/*,video/*,.mp3,.m4a,.wav,.aac,.flac,.ogg,.aiff,.caf,.mp4,.mov" hidden />
           <input type="file" id="shFileAll" hidden />
-          <div class="file-info" id="shFileInfo">No file yet. Anything from Voice Memos or the Files app works (videos too — the sound is used); Apple&nbsp;Music songs won't. Keep clips under ~10 minutes.</div>
+          <div class="file-info" id="shFileInfo">No file yet. Anything from Voice Memos or the Files app works (videos too — the sound is used); Apple&nbsp;Music songs won't. Any length is fine — stop whenever you're done.</div>
           <div class="file-info">File greyed out in the picker? <a href="#" id="shPickAll" style="color:var(--play)">Browse all files instead</a>.</div>
         </div>
         <div class="file-row" id="shTtsRow" hidden>
@@ -678,15 +678,31 @@
   var wuCollect = null;           // array while the eee check is sampling
 
   // --- shadow state (speak along with a reference voice in headphones) ---
+  // The reference file is STREAMED through an <audio> element (like a music
+  // app), never decoded whole — so any length of clip works without the
+  // memory blow-ups that crashed the tab. Her pitch/R1 are measured live
+  // from an analyser tap on the element while each chunk plays.
   var sessionMode = "loop";       // "loop" | "shadow" — routes recorder.onstop
   var shRunning = false;
-  var shBuf = null;               // decoded reference AudioBuffer (file mode)
+  var shBlob = null;              // the chosen reference file (kept compressed)
+  var shUrl = null;               // object URL the element streams from
+  var shDur = null;               // reference duration (s), from metadata
   var shName = "";
   var shPos = 0;                  // playback offset into the reference (s)
-  var shChunkLen = 0;             // length of the chunk just shadowed (s)
-  var shSrcNode = null;           // currently playing reference/take source
-  var shGainNode = null;
+  var shChunkLen = 0;             // planned length of the current chunk (s)
+  var shChunkNo = 0;
+  var shChunkActive = false;      // a reference chunk is playing + recording
+  var shEnded = false;            // element reached the end of the clip
+  var shWatch = null;             // interval watching for chunk end
+  var shSrcNode = null;           // Web Audio source for playing YOUR take back
+  var shGainNode = null;          // volume for her stream
+  var refSource = null;           // MediaElementSource (creatable only once)
+  var refAnalyser = null, refBuf = null;
+  var shRefCollect = null;        // her live samples during the current chunk
   var shTimers = [];
+  var shAudio = new Audio();
+  shAudio.setAttribute("playsinline", "");
+  shAudio.preload = "auto";
   var shSrc = "file";             // "file" | "tts"
   var shGainVal = 0.9;
   var shSent = 0;                 // sentence index (tts mode)
@@ -1176,6 +1192,17 @@
       w = h1h2(ds, dsSr, f);
     }
     if (wuCollect && f) wuCollect.push({ f: f, r1: r1, w: w });
+    // While a shadow chunk plays, measure HER too, from the analyser tap on
+    // the streaming element — same pipeline, so the comparison is fair.
+    if (shChunkActive && refAnalyser && refBuf) {
+      refAnalyser.getFloatTimeDomainData(refBuf);
+      var rf = detectPitch(refBuf, sr);
+      if (rf && shRefCollect) {
+        var rFactor = Math.max(1, Math.round(sr / 8000));
+        var rds = downsample(refBuf, rFactor);
+        shRefCollect.push({ f: rf, r1: estimateR1(rds, sr / rFactor) });
+      }
+    }
     updateLive(f, r1, w);
   }
   function updateLive(f, r1, w) {
@@ -1898,51 +1925,45 @@
     });
   }
 
-  // Decoded audio is raw PCM — enormous compared to the file (an hour-long
-  // mp3 decodes to >1 GB and iOS kills the tab). So: refuse big files before
-  // decoding, then downmix to mono and cap the length to keep memory small.
-  var SH_MAX_FILE_MB = 25;
-  var SH_MAX_SECS = 720;   // keep at most the first 12 minutes
-  function monoTrim(ctx, abuf) {
-    var sr = abuf.sampleRate;
-    var len = Math.min(abuf.length, Math.floor(SH_MAX_SECS * sr));
-    var chs = abuf.numberOfChannels;
-    if (chs === 1 && len === abuf.length) return abuf;   // already small
-    var out = ctx.createBuffer(1, len, sr);
-    var d = out.getChannelData(0);
-    for (var c = 0; c < chs; c++) {
-      var src = abuf.getChannelData(c);
-      for (var i = 0; i < len; i++) d[i] += src[i] / chs;
-    }
-    return out;
-  }
+  // Point the streaming element at the file and read only its metadata
+  // (duration). No decode, no size limit — an hour-long clip is fine.
+  var SH_PERSIST_MAX = 50 * 1024 * 1024;   // don't stuff huge blobs into IndexedDB
   function loadShadowBlob(blob, name, persist) {
-    if (blob.size > SH_MAX_FILE_MB * 1024 * 1024) {
-      els.shFileInfo.textContent = "That file is too big (" + Math.round(blob.size / 1048576) +
-        " MB) — phones run out of memory decoding it. Use a clip under ~10 minutes (you can trim one in Voice Memos).";
-      log("shadow file rejected: " + name + " " + blob.size + " bytes");
-      return;
-    }
     els.shFileInfo.textContent = "Loading “" + name + "”…";
+    if (shUrl) { try { URL.revokeObjectURL(shUrl); } catch (e) {} }
+    shBlob = blob; shName = name; shDur = null;
+    shUrl = URL.createObjectURL(blob);
+    shAudio.onloadedmetadata = function () {
+      shDur = isFinite(shAudio.duration) ? shAudio.duration : null;
+      var extra = (persist && blob.size > SH_PERSIST_MAX) ? " (too large to remember — re-pick it next visit)" : "";
+      els.shFileInfo.innerHTML = "<b>" + escapeHtml(name) + "</b> · " + (shDur ? fmtDur(shDur) : "length unknown") + " · ready" + extra;
+      log("shadow file: " + name + " · " + (shDur ? shDur.toFixed(1) + "s" : "?s") + " · " + Math.round(blob.size / 1024) + "KB");
+    };
+    shAudio.onerror = function () {
+      shBlob = null; shDur = null;
+      els.shFileInfo.textContent = "Couldn't read that file — try an mp3, m4a, or wav.";
+      log("shadow file failed to load: " + name);
+    };
+    shAudio.src = shUrl;
+    if (persist && blob.size <= SH_PERSIST_MAX) idbSaveShadow(blob, name);
+  }
+
+  // The element's audio is routed through Web Audio once (a MediaElement
+  // source can only ever be created once per element): gain for volume,
+  // analyser tap so her pitch/R1 can be measured live while she plays.
+  function ensureRefGraph() {
     var ctx = ensureAudioCtx();
-    if (!ctx || !blob.arrayBuffer) { els.shFileInfo.textContent = "This browser can't decode audio files."; return; }
-    blob.arrayBuffer().then(function (buf) {
-      // callback style for old Safari, but Chromium ALSO returns a promise —
-      // swallow its duplicate rejection so bad files don't log a phantom error
-      var p = ctx.decodeAudioData(buf, function (abuf) {
-        var trimmed = abuf.duration > SH_MAX_SECS + 1;
-        try { shBuf = monoTrim(ctx, abuf); } catch (e) { shBuf = abuf; }
-        shName = name;
-        els.shFileInfo.innerHTML = "<b>" + escapeHtml(name) + "</b> · " + fmtDur(shBuf.duration) +
-          (trimmed ? " (first " + fmtDur(SH_MAX_SECS) + " kept)" : "") + " · ready";
-        log("shadow file: " + name + " (" + shBuf.duration.toFixed(1) + "s, " + shBuf.numberOfChannels + "ch)");
-        if (persist) idbSaveShadow(blob, name);
-      }, function (e) {
-        els.shFileInfo.textContent = "Couldn't read that file — try an mp3, m4a, or wav.";
-        log("shadow decode failed: " + e);
-      });
-      if (p && p.catch) p.catch(function () {});
-    }).catch(function (e) { log("shadow read failed: " + e); els.shFileInfo.textContent = "Couldn't read that file."; });
+    if (!ctx || refSource) return;
+    try {
+      refSource = ctx.createMediaElementSource(shAudio);
+      shGainNode = ctx.createGain();
+      shGainNode.gain.value = 0;
+      refAnalyser = ctx.createAnalyser();
+      refAnalyser.fftSize = 2048;
+      refBuf = new Float32Array(refAnalyser.fftSize);
+      refSource.connect(shGainNode); shGainNode.connect(ctx.destination);
+      refSource.connect(refAnalyser);
+    } catch (e) { log("ref graph failed: " + e); }
   }
 
   function pickFemaleVoice() {
@@ -1960,7 +1981,7 @@
 
   async function startShadow() {
     if (running || wuRunning || shRunning) return;
-    if (shSrc === "file" && !shBuf) { shStatusMsg("Pick an audio file of her first (or switch to Phone voice).", true); return; }
+    if (shSrc === "file" && !shBlob) { shStatusMsg("Pick an audio file of her first (or switch to Phone voice).", true); return; }
     if (shSrc === "tts" && !("speechSynthesis" in window)) { shStatusMsg("This browser has no built-in reading voice — use an audio file.", true); return; }
     setAudioSession("play-and-record");
     var ctx = ensureAudioCtx();
@@ -1981,54 +2002,83 @@
     requestWake();
     sessionMode = "shadow";
     shRunning = true;
-    shPos = 0; shSent = 0;
+    shPos = 0; shSent = 0; shChunkNo = 0;
+    shEnded = false; shChunkActive = false;
     emptyStreak = 0;
     els.shBtn.textContent = "Stop shadowing";
     els.shBtn.classList.add("stop");
     els.startBtn.disabled = true;
     els.wuBtn.disabled = true;
     startLiveMeter();
+    if (shSrc === "file") {
+      // Unlock the streaming element inside this tap: start it playing muted
+      // so later programmatic seeks/plays are allowed on iOS.
+      ensureRefGraph();
+      if (shGainNode) shGainNode.gain.value = 0;
+      try { shAudio.currentTime = 0; } catch (e) {}
+      var pp = shAudio.play();
+      if (pp && pp.catch) pp.catch(function (e) { log("ref unlock blocked: " + e); });
+    }
     log("shadow start · " + (shSrc === "tts" ? "phone voice" : shName) + " · " + duration + "s chunks");
     shadowChunk();
   }
 
+  // A chunk of her plays (streamed + measured live) while you're recorded.
   function shadowChunk() {
     if (!shRunning) return;
     if (shSrc === "tts") { shadowSentence(); return; }
-    var total = shBuf.duration;
-    if (shPos >= total - 0.5) {
+    if (shEnded || (shDur && shPos >= shDur - 0.5)) {
       var c = ensureAudioCtx();
       if (c) { schedTone(c, c.currentTime, 660, 0, 0.12, 0.25); schedTone(c, c.currentTime, 880, 0.13, 0.12, 0.25); schedTone(c, c.currentTime, 1100, 0.26, 0.2, 0.25); }
       endShadow("Done — you shadowed the whole clip.");
       return;
     }
-    var len = Math.min(duration, total - shPos);
+    var len = shDur ? Math.min(duration, shDur - shPos) : duration;
     shChunkLen = len;
-    var idx = Math.floor(shPos / duration) + 1, n = Math.ceil(total / duration);
+    shChunkNo++;
+    var totalN = shDur ? Math.ceil(shDur / duration) : null;
     setPhase("recording");
-    shStatusMsg("Chunk " + idx + "/" + n + " — speak along with her.", true);
-    var ctx = audioCtx, t = ctx.currentTime;
-    schedTone(ctx, t, 740, 0, 0.11, 0.28);
-    schedTone(ctx, t, 988, 0.14, 0.13, 0.28);
+    shStatusMsg("Chunk " + shChunkNo + (totalN ? "/" + totalN : "") + " — speak along with her.", true);
+    var t = audioCtx.currentTime;
+    schedTone(audioCtx, t, 740, 0, 0.11, 0.28);
+    schedTone(audioCtx, t, 988, 0.14, 0.13, 0.28);
     shAfter(340, function () {
       if (!shRunning) return;
       chunks = [];
       try { recorder.start(); } catch (e) { log("shadow rec FAILED: " + e); endShadow("Recorder failed — try again."); return; }
-      try {
-        var src = audioCtx.createBufferSource();
-        src.buffer = shBuf;
-        shGainNode = audioCtx.createGain();
-        shGainNode.gain.value = shGainVal;
-        src.connect(shGainNode); shGainNode.connect(audioCtx.destination);
-        src.onended = function () { shAfter(400, stopRecorder); };  // small tail so you can finish
-        src.start(0, shPos, len);
-        shSrcNode = src;
-      } catch (e) { log("shadow ref play FAILED: " + e); endShadow("Playback failed."); return; }
-      startTimer(Math.max(1, Math.round(len)));
-      shAfter((len + 4) * 1000, function () {   // safety net
-        if (recorder && recorder.state === "recording") { log("shadow safety-net stop"); stopRecorder(); }
+      shRefCollect = [];
+      shChunkActive = true;
+      var chunkEnd = shPos + len;
+      try { shAudio.currentTime = shPos; } catch (e) { log("seek failed: " + e); }
+      if (shGainNode) shGainNode.gain.value = shGainVal;
+      var p2 = shAudio.play();
+      if (p2 && p2.catch) p2.catch(function (e) {
+        log("ref play blocked: " + e);
+        endShadow("The phone blocked playback — tap Start shadowing again.");
       });
+      startTimer(Math.max(1, Math.round(len)));
+      if (shWatch) clearInterval(shWatch);
+      shWatch = setInterval(function () {
+        if (!shChunkActive) return;
+        if (shAudio.ended || shAudio.currentTime >= chunkEnd - 0.05) finishChunk();
+      }, 200);
+      shAfter((len + 4) * 1000, finishChunk);   // safety net (stalls, pauses)
     });
+  }
+
+  function finishChunk() {
+    if (!shChunkActive) return;
+    shChunkActive = false;
+    if (shWatch) { clearInterval(shWatch); shWatch = null; }
+    if (shAudio.ended) shEnded = true;
+    // Advance by where she actually got to (never less than +1s, so a stalled
+    // stream can't loop the same spot forever).
+    var ct = 0;
+    try { ct = shAudio.currentTime || 0; } catch (e) {}
+    shPos = Math.max(shPos + 1, ct);
+    try { shAudio.pause(); } catch (e) {}
+    if (shGainNode) shGainNode.gain.value = 0;
+    shAfter(400, stopRecorder);   // small tail so you can finish your phrase
   }
 
   function shadowSentence() {
@@ -2058,15 +2108,18 @@
 
   function handleShadowTake(blob) {
     if (!shRunning) return;
-    // Analyze HER side of this chunk (file mode) with the same pipeline.
+    // HER side of this chunk: medians of the live samples collected while
+    // she streamed (needs a handful of voiced frames to count).
     var refStats = null;
-    if (shSrc === "file" && shChunkLen > 0) {
-      try {
-        var sr = shBuf.sampleRate, d = shBuf.getChannelData(0);
-        var s0 = Math.floor(shPos * sr), s1 = Math.min(d.length, Math.floor((shPos + shChunkLen) * sr));
-        refStats = analyzeSamples(d.subarray(s0, s1), sr).stats;
-      } catch (e) { log("ref analyze failed: " + e); }
+    if (shSrc === "file" && shRefCollect && shRefCollect.length >= 5) {
+      var rfArr = [], rr1Arr = [];
+      for (var ri = 0; ri < shRefCollect.length; ri++) {
+        rfArr.push(shRefCollect[ri].f);
+        if (shRefCollect[ri].r1) rr1Arr.push(shRefCollect[ri].r1);
+      }
+      refStats = { mean: median(rfArr), r1Med: median(rr1Arr) };
     }
+    shRefCollect = null;
     if (!blob.size) {
       log("shadow: empty take — skipping playback");
       shAfter(300, advanceShadow);
@@ -2099,7 +2152,7 @@
 
   function advanceShadow() {
     if (!shRunning) return;
-    shPos += shChunkLen;
+    // shPos already advanced in finishChunk (by her real playback position)
     shSent++;
     shadowChunk();
   }
@@ -2139,9 +2192,13 @@
     for (var i = 0; i < shTimers.length; i++) clearTimeout(shTimers[i]);
     shTimers = [];
     shRunning = false;
+    shChunkActive = false;
+    shRefCollect = null;
+    if (shWatch) { clearInterval(shWatch); shWatch = null; }
     try { if ("speechSynthesis" in window) window.speechSynthesis.cancel(); } catch (e) {}
+    try { shAudio.pause(); } catch (e) {}
+    if (shGainNode) shGainNode.gain.value = 0;
     if (shSrcNode) { try { shSrcNode.onended = null; shSrcNode.stop(); } catch (e) {} shSrcNode = null; }
-    shGainNode = null;
     if (recorder && recorder.state !== "inactive") {
       try { recorder.stop(); } catch (e) {}
     }
@@ -2298,7 +2355,7 @@
 
   // Analysis internals, exposed for automated testing only.
   window.__vl = { lastStats: null, detectPitch: detectPitch, estimateR1: estimateR1, h1h2: h1h2, downsample: downsample, analyzeSamples: analyzeSamples,
-                  shadowInfo: function () { return shBuf ? { ch: shBuf.numberOfChannels, dur: shBuf.duration, sr: shBuf.sampleRate } : null; } };
+                  shadowInfo: function () { return shBlob ? { dur: shDur, size: shBlob.size } : null; } };
 
   // graceful message if the browser can't record
   if (!navigator.mediaDevices || typeof MediaRecorder === "undefined") {
