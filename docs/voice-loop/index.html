@@ -72,7 +72,7 @@
     font-weight: 800;
     letter-spacing: 0.8px;
     color: #1a1526;
-    background: #6ee7d8;   /* v13 */
+    background: #d4f26d;   /* v14 */
   }
 
   /* --- tab bar --- */
@@ -459,7 +459,7 @@
   <header>
     <h1>Voice Loop</h1>
     <p>Hands-free voice practice — pitch · resonance · weight</p>
-    <div class="version" id="version">v13</div>
+    <div class="version" id="version">v14</div>
   </header>
 
   <nav class="tabs" id="tabs">
@@ -663,6 +663,46 @@
   try { droneOn = localStorage.getItem("vl_drone") === "1"; } catch (e) {}
   var analyser = null, micSource = null, rafId = null, pitchBuf = null, lastMeterAt = 0;
   var droneOsc = null, droneGain = null;
+
+  // --- session generation + audio kill-switches ---
+  // Every start/stop bumps `gen`; async continuations (recorder onstop,
+  // decode callbacks, cue timers, safety nets) capture the gen they were
+  // created under and no-op if it changed. Without this, a quick stop→start
+  // let the OLD session's playback fire on top of the new one — audio that
+  // no button could reach anymore.
+  var gen = 0;
+  function fresh(g) { return g === gen; }
+  var masterGain = null;           // everything audible routes through this
+  var liveSources = [];            // every playback BufferSource, so Stop kills ALL
+  var wuOscs = [];                 // scheduled warm-up glide oscillators
+
+  function masterOut() {
+    var ctx = ensureAudioCtx();
+    if (!ctx) return null;
+    if (!masterGain) {
+      masterGain = ctx.createGain();
+      masterGain.gain.value = 1;
+      masterGain.connect(ctx.destination);
+    }
+    return masterGain;
+  }
+  function muteMaster() {
+    if (masterGain) { try { masterGain.gain.cancelScheduledValues(0); } catch (e) {} masterGain.gain.value = 0; }
+  }
+  function unmuteMaster() {
+    var m = masterOut();
+    if (m) { try { m.gain.cancelScheduledValues(0); } catch (e) {} m.gain.value = 1; }
+  }
+  function trackSource(src) {
+    liveSources.push(src);
+    if (liveSources.length > 8) liveSources.shift();
+  }
+  function stopAllSources() {
+    for (var i = 0; i < liveSources.length; i++) {
+      try { liveSources[i].onended = null; liveSources[i].stop(); } catch (e) {}
+    }
+    liveSources = [];
+  }
   var lastTakeMean = null;        // mean pitch of the most recent take (for the verdict cue)
   var lastStats = null;           // full stats of the most recent take (for Set baseline)
   var r1Hist = [], wHist = [];    // live smoothing (median of recent frames)
@@ -773,11 +813,13 @@
     g.gain.setValueAtTime(0.0001, t + start);
     g.gain.linearRampToValueAtTime(peak, t + start + 0.02);
     g.gain.exponentialRampToValueAtTime(0.0001, t + start + len);
-    o.connect(g); g.connect(ctx.destination);
+    o.connect(g); g.connect(masterOut() || ctx.destination);
     o.start(t + start); o.stop(t + start + len + 0.03);
   }
 
-  // Schedule a sine that glides fLo → fHi → fLo (warm-up sirens).
+  // Schedule a sine that glides fLo → fHi → fLo (warm-up sirens). The
+  // oscillator is remembered so stopping the warm-up silences glides that
+  // were scheduled but not finished.
   function schedGlide(ctx, t, start, fLo, fHi, dur, peak) {
     var o = ctx.createOscillator(), g = ctx.createGain();
     o.type = "sine";
@@ -788,8 +830,9 @@
     g.gain.linearRampToValueAtTime(peak, t + start + 0.06);
     g.gain.setValueAtTime(peak, t + start + dur - 0.08);
     g.gain.exponentialRampToValueAtTime(0.0001, t + start + dur);
-    o.connect(g); g.connect(ctx.destination);
+    o.connect(g); g.connect(masterOut() || ctx.destination);
     o.start(t + start); o.stop(t + start + dur + 0.05);
+    wuOscs.push(o);
   }
 
   // Spoken prompts for the eyes-free warm-up (falls back silently to tones).
@@ -1271,7 +1314,7 @@
       droneOsc.type = "sine";
       droneOsc.frequency.value = targetCenter();
       droneGain.gain.value = 0.05;        // quiet reference
-      droneOsc.connect(droneGain); droneGain.connect(ctx.destination);
+      droneOsc.connect(droneGain); droneGain.connect(masterOut() || ctx.destination);
       droneOsc.start();
     } catch (e) { log("drone failed: " + e); }
   }
@@ -1515,9 +1558,10 @@
     if (!running || recordArmed) return;
     recordArmed = true;
     setPhase("recording");
+    var g = gen;
     // Cue first, then start recording — keeps the beep out of your clip.
     playCue("rec", function () {
-      if (!running) { recordArmed = false; return; }
+      if (!fresh(g) || !running) { recordArmed = false; return; }
       chunks = [];
       // Reuse the one recorder created for this session. Creating a fresh
       // MediaRecorder per segment is unreliable on iOS (2nd+ yields no data).
@@ -1583,22 +1627,24 @@
   // fails, and a safety-net always advances the loop so it can never stall.
   function playTake(blob) {
     setPhase("playing");
+    var g = gen;
     var ctx = ensureAudioCtx();
     if (!ctx || !ctx.decodeAudioData || !blob.arrayBuffer) { playTakeFallback(blob); return; }
     blob.arrayBuffer().then(function (buf) {
       var p = ctx.decodeAudioData(buf, function (audioBuf) {
-        if (!running) return;
+        if (!fresh(g) || !running) return;
         var stats = analyzeTake(audioBuf);
-        var startPlayback = function () { if (running) playBuffer(audioBuf); };
+        var startPlayback = function () { if (fresh(g) && running) playBuffer(audioBuf); };
         if (guideTones && stats && stats.mean != null) verdictCue(stats.mean, startPlayback);
         else playCue("play", startPlayback);
-      }, function (e) { log("decode failed: " + e); playTakeFallback(blob); });
+      }, function (e) { log("decode failed: " + e); if (fresh(g) && running) playTakeFallback(blob); });
       if (p && p.catch) p.catch(function () {});
-    }).catch(function (e) { log("arrayBuffer failed: " + e); playTakeFallback(blob); });
+    }).catch(function (e) { log("arrayBuffer failed: " + e); if (fresh(g) && running) playTakeFallback(blob); });
   }
 
   function playBuffer(audioBuf) {
     var ctx = audioCtx;
+    var g = gen;
     var advanced = false;
     var guard = setTimeout(function () { log("playback safety-net → next segment"); advance(); }, (Math.round(audioBuf.duration) + 3) * 1000);
     function advance() {
@@ -1606,15 +1652,16 @@
       advanced = true;
       clearTimeout(guard);
       loopSource = null;
-      if (running) beginRecording();
+      if (fresh(g) && running) beginRecording();
     }
     try {
       var src = ctx.createBufferSource();
       src.buffer = audioBuf;
-      src.connect(ctx.destination);
+      src.connect(masterOut() || ctx.destination);
       src.onended = advance;
       src.start();
       loopSource = src;
+      trackSource(src);
       log("playback start (" + audioBuf.duration.toFixed(1) + "s)");
       startTimer(Math.max(1, Math.round(audioBuf.duration)));
     } catch (e) { log("buffer play failed: " + e); advance(); }
@@ -1622,16 +1669,17 @@
 
   // Rare path: decode unavailable/failed — play via <audio>, skip analysis.
   function playTakeFallback(blob) {
+    var g = gen;
     var advanced = false;
     var guard = setTimeout(function () { log("fallback safety-net → next segment"); advance(); }, (duration + 3) * 1000);
     function advance() {
       if (advanced) return;
       advanced = true;
       clearTimeout(guard);
-      if (running) beginRecording();
+      if (fresh(g) && running) beginRecording();
     }
     playCue("play", function () {
-      if (!running) return;
+      if (!fresh(g) || !running) return;
       log("playback via <audio> fallback");
       var url = URL.createObjectURL(blob);
       audioEl.src = url;
@@ -1654,17 +1702,24 @@
       log("MediaRecorder create FAILED: " + e2);
       return false;
     }
+    var g = gen;   // this recorder belongs to the current session only
     recorder.ondataavailable = function (ev) { if (ev.data && ev.data.size) chunks.push(ev.data); };
-    recorder.onstop = handleStop;
+    recorder.onstop = function () {
+      if (!fresh(g)) { chunks = []; log("stale recorder onstop ignored"); return; }
+      handleStop();
+    };
     return true;
   }
 
   async function start() {
     if (wuRunning || shRunning) return;
+    gen++;               // orphan any callbacks from previous sessions
+    stopAllSources();
     // Claim the audio session BEFORE grabbing the mic — this is what keeps
     // the car's music from resuming during the record→playback handoff.
     setAudioSession("play-and-record");
     ensureAudioCtx();   // unlock audio cues + buffer playback within this tap
+    unmuteMaster();
     claimNowPlaying();
     try {
       await ensureStream();
@@ -1705,6 +1760,9 @@
   function stop() {
     running = false;
     recordArmed = false;
+    gen++;               // every pending callback from this session is now dead
+    stopAllSources();    // kill ALL playback, not just the newest source
+    muteMaster();        // and hard-silence anything that slipped through
     log("session stop");
     els.startBtn.textContent = "Start practice";
     els.startBtn.classList.remove("stop");
@@ -1759,6 +1817,10 @@
       return;
     }
     requestWake();
+    gen++;
+    stopAllSources();
+    unmuteMaster();
+    wuOscs = [];
     wuRunning = true;
     els.wuBtn.textContent = "Stop warm-up";
     els.wuBtn.classList.add("stop");
@@ -1846,8 +1908,14 @@
   }
 
   function endWarmup(msg) {
+    gen++;
     for (var i = 0; i < wuTimers.length; i++) clearTimeout(wuTimers[i]);
     wuTimers = [];
+    // Silence glides that were scheduled but haven't finished sounding.
+    var killed = 0;
+    for (i = 0; i < wuOscs.length; i++) { try { wuOscs[i].stop(); killed++; } catch (e) {} }
+    if (killed) log("warm-up: silenced " + killed + " scheduled glide(s)");
+    wuOscs = [];
     wuCollect = null;
     wuRunning = false;
     try { if ("speechSynthesis" in window) window.speechSynthesis.cancel(); } catch (e) {}
@@ -1961,7 +2029,7 @@
       refAnalyser = ctx.createAnalyser();
       refAnalyser.fftSize = 2048;
       refBuf = new Float32Array(refAnalyser.fftSize);
-      refSource.connect(shGainNode); shGainNode.connect(ctx.destination);
+      refSource.connect(shGainNode); shGainNode.connect(masterOut() || ctx.destination);
       refSource.connect(refAnalyser);
     } catch (e) { log("ref graph failed: " + e); }
   }
@@ -1983,6 +2051,9 @@
     if (running || wuRunning || shRunning) return;
     if (shSrc === "file" && !shBlob) { shStatusMsg("Pick an audio file of her first (or switch to Phone voice).", true); return; }
     if (shSrc === "tts" && !("speechSynthesis" in window)) { shStatusMsg("This browser has no built-in reading voice — use an audio file.", true); return; }
+    gen++;               // must precede createRecorder so its onstop stays fresh
+    stopAllSources();
+    unmuteMaster();
     setAudioSession("play-and-record");
     var ctx = ensureAudioCtx();
     if (!ctx) { shStatusMsg("This browser can't play audio.", true); setAudioSession("auto"); return; }
@@ -2127,25 +2198,27 @@
     }
     setPhase("playing");
     shStatusMsg("Listen back — that was you.", true);
+    var g = gen;
     blob.arrayBuffer().then(function (buf) {
       var p = audioCtx.decodeAudioData(buf, function (abuf) {
-        if (!shRunning) return;
+        if (!fresh(g) || !shRunning) return;
         var yours = null;
         try { yours = analyzeSamples(abuf.getChannelData(0), abuf.sampleRate).stats; } catch (e) { log("take analyze failed: " + e); }
         renderShadowCompare(refStats, yours);
         var advanced = false;
-        var adv = function () { if (advanced) return; advanced = true; clearTimeout(guard); shSrcNode = null; advanceShadow(); };
+        var adv = function () { if (advanced) return; advanced = true; clearTimeout(guard); shSrcNode = null; if (fresh(g)) advanceShadow(); };
         var guard = setTimeout(function () { log("shadow playback safety-net"); adv(); }, (abuf.duration + 3) * 1000);
         try {
           var src = audioCtx.createBufferSource();
           src.buffer = abuf;
-          src.connect(audioCtx.destination);
+          src.connect(masterOut() || audioCtx.destination);
           src.onended = adv;
           src.start();
           shSrcNode = src;
+          trackSource(src);
           startTimer(Math.max(1, Math.round(abuf.duration)));
         } catch (e) { log("shadow take play failed: " + e); adv(); }
-      }, function (e) { log("shadow take decode failed: " + e); shAfter(300, advanceShadow); });
+      }, function (e) { log("shadow take decode failed: " + e); if (fresh(g)) shAfter(300, advanceShadow); });
       if (p && p.catch) p.catch(function () {});
     }).catch(function (e) { log("shadow take read failed: " + e); shAfter(300, advanceShadow); });
   }
@@ -2189,10 +2262,12 @@
   }
 
   function endShadow(msg) {
+    gen++;
     for (var i = 0; i < shTimers.length; i++) clearTimeout(shTimers[i]);
     shTimers = [];
     shRunning = false;
     shChunkActive = false;
+    stopAllSources();
     shRefCollect = null;
     if (shWatch) { clearInterval(shWatch); shWatch = null; }
     try { if ("speechSynthesis" in window) window.speechSynthesis.cancel(); } catch (e) {}
