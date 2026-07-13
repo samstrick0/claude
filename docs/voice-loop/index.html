@@ -72,7 +72,7 @@
     font-weight: 800;
     letter-spacing: 0.8px;
     color: #1a1526;
-    background: #8df2a6;   /* v11 */
+    background: #ff9e80;   /* v12 */
   }
 
   /* --- tab bar --- */
@@ -459,7 +459,7 @@
   <header>
     <h1>Voice Loop</h1>
     <p>Hands-free voice practice — pitch · resonance · weight</p>
-    <div class="version" id="version">v11</div>
+    <div class="version" id="version">v12</div>
   </header>
 
   <nav class="tabs" id="tabs">
@@ -524,7 +524,7 @@
                guaranteed path. Bad picks fail gracefully at decode. -->
           <input type="file" id="shFile" accept="audio/*,video/*,.mp3,.m4a,.wav,.aac,.flac,.ogg,.aiff,.caf,.mp4,.mov" hidden />
           <input type="file" id="shFileAll" hidden />
-          <div class="file-info" id="shFileInfo">No file yet. Anything from Voice Memos or the Files app works (videos too — the sound is used); Apple&nbsp;Music songs won't.</div>
+          <div class="file-info" id="shFileInfo">No file yet. Anything from Voice Memos or the Files app works (videos too — the sound is used); Apple&nbsp;Music songs won't. Keep clips under ~10 minutes.</div>
           <div class="file-info">File greyed out in the picker? <a href="#" id="shPickAll" style="color:var(--play)">Browse all files instead</a>.</div>
         </div>
         <div class="file-row" id="shTtsRow" hidden>
@@ -1898,7 +1898,31 @@
     });
   }
 
+  // Decoded audio is raw PCM — enormous compared to the file (an hour-long
+  // mp3 decodes to >1 GB and iOS kills the tab). So: refuse big files before
+  // decoding, then downmix to mono and cap the length to keep memory small.
+  var SH_MAX_FILE_MB = 25;
+  var SH_MAX_SECS = 720;   // keep at most the first 12 minutes
+  function monoTrim(ctx, abuf) {
+    var sr = abuf.sampleRate;
+    var len = Math.min(abuf.length, Math.floor(SH_MAX_SECS * sr));
+    var chs = abuf.numberOfChannels;
+    if (chs === 1 && len === abuf.length) return abuf;   // already small
+    var out = ctx.createBuffer(1, len, sr);
+    var d = out.getChannelData(0);
+    for (var c = 0; c < chs; c++) {
+      var src = abuf.getChannelData(c);
+      for (var i = 0; i < len; i++) d[i] += src[i] / chs;
+    }
+    return out;
+  }
   function loadShadowBlob(blob, name, persist) {
+    if (blob.size > SH_MAX_FILE_MB * 1024 * 1024) {
+      els.shFileInfo.textContent = "That file is too big (" + Math.round(blob.size / 1048576) +
+        " MB) — phones run out of memory decoding it. Use a clip under ~10 minutes (you can trim one in Voice Memos).";
+      log("shadow file rejected: " + name + " " + blob.size + " bytes");
+      return;
+    }
     els.shFileInfo.textContent = "Loading “" + name + "”…";
     var ctx = ensureAudioCtx();
     if (!ctx || !blob.arrayBuffer) { els.shFileInfo.textContent = "This browser can't decode audio files."; return; }
@@ -1906,16 +1930,19 @@
       // callback style for old Safari, but Chromium ALSO returns a promise —
       // swallow its duplicate rejection so bad files don't log a phantom error
       var p = ctx.decodeAudioData(buf, function (abuf) {
-        shBuf = abuf; shName = name;
-        els.shFileInfo.innerHTML = "<b>" + escapeHtml(name) + "</b> · " + fmtDur(abuf.duration) + " · ready";
-        log("shadow file: " + name + " (" + abuf.duration.toFixed(1) + "s)");
+        var trimmed = abuf.duration > SH_MAX_SECS + 1;
+        try { shBuf = monoTrim(ctx, abuf); } catch (e) { shBuf = abuf; }
+        shName = name;
+        els.shFileInfo.innerHTML = "<b>" + escapeHtml(name) + "</b> · " + fmtDur(shBuf.duration) +
+          (trimmed ? " (first " + fmtDur(SH_MAX_SECS) + " kept)" : "") + " · ready";
+        log("shadow file: " + name + " (" + shBuf.duration.toFixed(1) + "s, " + shBuf.numberOfChannels + "ch)");
         if (persist) idbSaveShadow(blob, name);
       }, function (e) {
         els.shFileInfo.textContent = "Couldn't read that file — try an mp3, m4a, or wav.";
         log("shadow decode failed: " + e);
       });
       if (p && p.catch) p.catch(function () {});
-    }).catch(function (e) { log("shadow read failed: " + e); });
+    }).catch(function (e) { log("shadow read failed: " + e); els.shFileInfo.textContent = "Couldn't read that file."; });
   }
 
   function pickFemaleVoice() {
@@ -2270,7 +2297,8 @@
   };
 
   // Analysis internals, exposed for automated testing only.
-  window.__vl = { lastStats: null, detectPitch: detectPitch, estimateR1: estimateR1, h1h2: h1h2, downsample: downsample, analyzeSamples: analyzeSamples };
+  window.__vl = { lastStats: null, detectPitch: detectPitch, estimateR1: estimateR1, h1h2: h1h2, downsample: downsample, analyzeSamples: analyzeSamples,
+                  shadowInfo: function () { return shBuf ? { ch: shBuf.numberOfChannels, dur: shBuf.duration, sr: shBuf.sampleRate } : null; } };
 
   // graceful message if the browser can't record
   if (!navigator.mediaDevices || typeof MediaRecorder === "undefined") {
