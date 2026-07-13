@@ -72,7 +72,7 @@
     font-weight: 800;
     letter-spacing: 0.8px;
     color: #1a1526;
-    background: #c9a3f5;   /* v10 */
+    background: #8df2a6;   /* v11 */
   }
 
   /* --- tab bar --- */
@@ -459,7 +459,7 @@
   <header>
     <h1>Voice Loop</h1>
     <p>Hands-free voice practice — pitch · resonance · weight</p>
-    <div class="version" id="version">v10</div>
+    <div class="version" id="version">v11</div>
   </header>
 
   <nav class="tabs" id="tabs">
@@ -519,8 +519,13 @@
         </div>
         <div class="file-row" id="shFileRow">
           <button class="secondary" id="shPickBtn" type="button">Choose audio file…</button>
-          <input type="file" id="shFile" accept="audio/*" hidden />
-          <div class="file-info" id="shFileInfo">No file yet. Anything from Voice Memos or the Files app works; Apple&nbsp;Music songs won't.</div>
+          <!-- Two inputs: iOS's picker wrongly greys out valid audio under a
+               MIME filter sometimes, so a second, unfiltered input is the
+               guaranteed path. Bad picks fail gracefully at decode. -->
+          <input type="file" id="shFile" accept="audio/*,video/*,.mp3,.m4a,.wav,.aac,.flac,.ogg,.aiff,.caf,.mp4,.mov" hidden />
+          <input type="file" id="shFileAll" hidden />
+          <div class="file-info" id="shFileInfo">No file yet. Anything from Voice Memos or the Files app works (videos too — the sound is used); Apple&nbsp;Music songs won't.</div>
+          <div class="file-info">File greyed out in the picker? <a href="#" id="shPickAll" style="color:var(--play)">Browse all files instead</a>.</div>
         </div>
         <div class="file-row" id="shTtsRow" hidden>
           <div class="file-info">Your phone reads a practice passage sentence by sentence in its female voice — no file needed. Speak along with each sentence.</div>
@@ -1020,6 +1025,8 @@
     shTtsRow: document.getElementById("shTtsRow"),
     shPickBtn: document.getElementById("shPickBtn"),
     shFile: document.getElementById("shFile"),
+    shFileAll: document.getElementById("shFileAll"),
+    shPickAll: document.getElementById("shPickAll"),
     shFileInfo: document.getElementById("shFileInfo"),
     shVol: document.getElementById("shVol"),
     shBtn: document.getElementById("shBtn"),
@@ -1552,13 +1559,14 @@
     var ctx = ensureAudioCtx();
     if (!ctx || !ctx.decodeAudioData || !blob.arrayBuffer) { playTakeFallback(blob); return; }
     blob.arrayBuffer().then(function (buf) {
-      ctx.decodeAudioData(buf, function (audioBuf) {
+      var p = ctx.decodeAudioData(buf, function (audioBuf) {
         if (!running) return;
         var stats = analyzeTake(audioBuf);
         var startPlayback = function () { if (running) playBuffer(audioBuf); };
         if (guideTones && stats && stats.mean != null) verdictCue(stats.mean, startPlayback);
         else playCue("play", startPlayback);
       }, function (e) { log("decode failed: " + e); playTakeFallback(blob); });
+      if (p && p.catch) p.catch(function () {});
     }).catch(function (e) { log("arrayBuffer failed: " + e); playTakeFallback(blob); });
   }
 
@@ -1895,7 +1903,9 @@
     var ctx = ensureAudioCtx();
     if (!ctx || !blob.arrayBuffer) { els.shFileInfo.textContent = "This browser can't decode audio files."; return; }
     blob.arrayBuffer().then(function (buf) {
-      ctx.decodeAudioData(buf, function (abuf) {
+      // callback style for old Safari, but Chromium ALSO returns a promise —
+      // swallow its duplicate rejection so bad files don't log a phantom error
+      var p = ctx.decodeAudioData(buf, function (abuf) {
         shBuf = abuf; shName = name;
         els.shFileInfo.innerHTML = "<b>" + escapeHtml(name) + "</b> · " + fmtDur(abuf.duration) + " · ready";
         log("shadow file: " + name + " (" + abuf.duration.toFixed(1) + "s)");
@@ -1904,6 +1914,7 @@
         els.shFileInfo.textContent = "Couldn't read that file — try an mp3, m4a, or wav.";
         log("shadow decode failed: " + e);
       });
+      if (p && p.catch) p.catch(function () {});
     }).catch(function (e) { log("shadow read failed: " + e); });
   }
 
@@ -2037,7 +2048,7 @@
     setPhase("playing");
     shStatusMsg("Listen back — that was you.", true);
     blob.arrayBuffer().then(function (buf) {
-      audioCtx.decodeAudioData(buf, function (abuf) {
+      var p = audioCtx.decodeAudioData(buf, function (abuf) {
         if (!shRunning) return;
         var yours = null;
         try { yours = analyzeSamples(abuf.getChannelData(0), abuf.sampleRate).stats; } catch (e) { log("take analyze failed: " + e); }
@@ -2055,6 +2066,7 @@
           startTimer(Math.max(1, Math.round(abuf.duration)));
         } catch (e) { log("shadow take play failed: " + e); adv(); }
       }, function (e) { log("shadow take decode failed: " + e); shAfter(300, advanceShadow); });
+      if (p && p.catch) p.catch(function () {});
     }).catch(function (e) { log("shadow take read failed: " + e); shAfter(300, advanceShadow); });
   }
 
@@ -2128,10 +2140,13 @@
     else startShadow();
   };
   els.shPickBtn.onclick = function () { els.shFile.click(); };
-  els.shFile.addEventListener("change", function () {
-    var f = els.shFile.files && els.shFile.files[0];
+  els.shPickAll.onclick = function (e) { e.preventDefault(); els.shFileAll.click(); };
+  function onFilePicked() {
+    var f = this.files && this.files[0];
     if (f) loadShadowBlob(f, f.name, true);
-  });
+  }
+  els.shFile.addEventListener("change", onFilePicked);
+  els.shFileAll.addEventListener("change", onFilePicked);
   els.shSource.addEventListener("click", function (e) {
     var btn = e.target.closest("button");
     if (!btn || shRunning) return;
