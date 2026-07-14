@@ -72,7 +72,7 @@
     font-weight: 800;
     letter-spacing: 0.8px;
     color: #1a1526;
-    background: #d4f26d;   /* v14 */
+    background: #f5f5f5;   /* v15 */
   }
 
   /* --- tab bar --- */
@@ -421,6 +421,7 @@
     text-align: center;
   }
   .wu-live b { color: var(--res); }
+  .wu-live.her b { color: var(--play); }
   .wu-result { line-height: 1.6; }
   .wu-result b { color: var(--res); }
   .wu-result b.good { color: var(--good); }
@@ -459,7 +460,7 @@
   <header>
     <h1>Voice Loop</h1>
     <p>Hands-free voice practice — pitch · resonance · weight</p>
-    <div class="version" id="version">v14</div>
+    <div class="version" id="version">v15</div>
   </header>
 
   <nav class="tabs" id="tabs">
@@ -537,6 +538,7 @@
       </div>
       <button class="primary" id="shBtn">Start shadowing</button>
       <div class="wu-status" id="shStatus"></div>
+      <div class="wu-live her" id="shLiveHer"></div>
       <div class="wu-live" id="shLive"></div>
       <div class="card" id="shCard" hidden>
         <div class="card-head">Her vs you — last chunk</div>
@@ -739,6 +741,7 @@
   var refSource = null;           // MediaElementSource (creatable only once)
   var refAnalyser = null, refBuf = null;
   var shRefCollect = null;        // her live samples during the current chunk
+  var shHerFHist = [], shHerRHist = [];   // smoothing for her live readout
   var shTimers = [];
   var shAudio = new Audio();
   shAudio.setAttribute("playsinline", "");
@@ -1090,6 +1093,7 @@
     shVol: document.getElementById("shVol"),
     shBtn: document.getElementById("shBtn"),
     shStatus: document.getElementById("shStatus"),
+    shLiveHer: document.getElementById("shLiveHer"),
     shLive: document.getElementById("shLive"),
     shCard: document.getElementById("shCard"),
     shTiles: document.getElementById("shTiles"),
@@ -1240,10 +1244,22 @@
     if (shChunkActive && refAnalyser && refBuf) {
       refAnalyser.getFloatTimeDomainData(refBuf);
       var rf = detectPitch(refBuf, sr);
-      if (rf && shRefCollect) {
+      var rr1 = null;
+      if (rf) {
         var rFactor = Math.max(1, Math.round(sr / 8000));
         var rds = downsample(refBuf, rFactor);
-        shRefCollect.push({ f: rf, r1: estimateR1(rds, sr / rFactor) });
+        rr1 = estimateR1(rds, sr / rFactor);
+        if (shRefCollect) shRefCollect.push({ f: rf, r1: rr1 });
+        shHerFHist.push(rf); if (shHerFHist.length > 5) shHerFHist.shift();
+        if (rr1) { shHerRHist.push(rr1); if (shHerRHist.length > 5) shHerRHist.shift(); }
+      }
+      // live "Her" readout (median-smoothed, like the mic side)
+      if (rf && shHerFHist.length) {
+        var hf = median(shHerFHist), hr = shHerRHist.length ? median(shHerRHist) : null;
+        els.shLiveHer.innerHTML = "Her: <b>" + Math.round(hf) + "</b> Hz" +
+          (hr ? " · R1 <b>" + Math.round(hr) + "</b> Hz" : "");
+      } else if (!shHerFHist.length) {
+        els.shLiveHer.innerHTML = "<span style=\"opacity:.55\">Her: — listening —</span>";
       }
     }
     updateLive(f, r1, w);
@@ -1300,6 +1316,7 @@
     els.resLive.textContent = "";
     els.wuLive.textContent = "";
     els.shLive.textContent = "";
+    els.shLiveHer.textContent = "";
   }
 
   // --- reference drone (headphones only) ---
@@ -2118,6 +2135,8 @@
       chunks = [];
       try { recorder.start(); } catch (e) { log("shadow rec FAILED: " + e); endShadow("Recorder failed — try again."); return; }
       shRefCollect = [];
+      shHerFHist = []; shHerRHist = [];
+      els.shLiveHer.innerHTML = "<span style=\"opacity:.55\">Her: — listening —</span>";
       shChunkActive = true;
       var chunkEnd = shPos + len;
       try { shAudio.currentTime = shPos; } catch (e) { log("seek failed: " + e); }
@@ -2149,6 +2168,7 @@
     shPos = Math.max(shPos + 1, ct);
     try { shAudio.pause(); } catch (e) {}
     if (shGainNode) shGainNode.gain.value = 0;
+    els.shLiveHer.textContent = "";
     shAfter(400, stopRecorder);   // small tail so you can finish your phrase
   }
 
