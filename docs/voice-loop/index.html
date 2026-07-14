@@ -72,7 +72,7 @@
     font-weight: 800;
     letter-spacing: 0.8px;
     color: #1a1526;
-    background: #ffb3e6;   /* v16 */
+    background: #ff6b6b;   /* v17 */
   }
 
   /* --- tab bar --- */
@@ -277,6 +277,14 @@
     border-radius: 12px;
     cursor: pointer;
   }
+  .secondary.wide {
+    width: 100%;
+    padding: 14px;
+    font-size: 15px;
+    border-radius: 15px;
+    border-color: var(--play-deep);
+    color: var(--play);
+  }
 
   .note {
     min-height: 0;
@@ -460,7 +468,7 @@
   <header>
     <h1>Voice Loop</h1>
     <p>Hands-free voice practice — pitch · resonance · weight</p>
-    <div class="version" id="version">v16</div>
+    <div class="version" id="version">v17</div>
   </header>
 
   <nav class="tabs" id="tabs">
@@ -497,6 +505,7 @@
       </div>
 
       <button class="primary" id="startBtn">Start practice</button>
+      <button class="secondary wide" id="skipBtn" type="button" hidden>Skip — record now</button>
       <div class="note" id="practiceNote">Tones mark each switch, so you can practice without watching the screen. Silent switch off, volume up.</div>
 
       <div class="card" id="takeCard" hidden>
@@ -538,6 +547,7 @@
         </div>
       </div>
       <button class="primary" id="shBtn">Start shadowing</button>
+      <button class="secondary wide" id="shSkipBtn" type="button" hidden>Skip — next chunk</button>
       <div class="wu-status" id="shStatus"></div>
       <div class="wu-live her" id="shLiveHer"></div>
       <div class="wu-live" id="shLive"></div>
@@ -691,6 +701,7 @@
   var masterGain = null;           // everything audible routes through this
   var liveSources = [];            // every playback BufferSource, so Stop kills ALL
   var wuOscs = [];                 // scheduled warm-up glide oscillators
+  var skipPlayback = null;         // set while a take plays: cut it short + advance
 
   function masterOut() {
     var ctx = ensureAudioCtx();
@@ -1067,6 +1078,7 @@
     count: document.getElementById("count"),
     phase: document.getElementById("phase"),
     startBtn: document.getElementById("startBtn"),
+    skipBtn: document.getElementById("skipBtn"),
     practiceNote: document.getElementById("practiceNote"),
     lengthBox: document.getElementById("lengthBox"),
     lenVal: document.getElementById("lenVal"),
@@ -1112,6 +1124,7 @@
     shFileInfo: document.getElementById("shFileInfo"),
     shVol: document.getElementById("shVol"),
     shBtn: document.getElementById("shBtn"),
+    shSkipBtn: document.getElementById("shSkipBtn"),
     shStatus: document.getElementById("shStatus"),
     shLiveHer: document.getElementById("shLiveHer"),
     shLive: document.getElementById("shLive"),
@@ -1167,6 +1180,9 @@
     if (p === "recording") { els.body.classList.add("rec"); els.phase.textContent = "Recording — speak"; }
     else if (p === "playing") { els.body.classList.add("play"); els.phase.textContent = "Listen back"; }
     else { els.phase.textContent = running ? "…" : "Ready"; }
+    // Skip buttons only make sense while a take is playing back
+    els.skipBtn.hidden = !(p === "playing" && running);
+    els.shSkipBtn.hidden = !(p === "playing" && shRunning);
   }
 
   function showCount(n) { els.count.textContent = n; }
@@ -1696,6 +1712,7 @@
       advanced = true;
       clearTimeout(guard);
       loopSource = null;
+      skipPlayback = null;
       if (fresh(g) && running) beginRecording();
     }
     try {
@@ -1706,6 +1723,7 @@
       src.start();
       loopSource = src;
       trackSource(src);
+      skipPlayback = function () { try { src.onended = null; src.stop(); } catch (e) {} advance(); };
       log("playback start (" + audioBuf.duration.toFixed(1) + "s)");
       startTimer(Math.max(1, Math.round(audioBuf.duration)));
     } catch (e) { log("buffer play failed: " + e); advance(); }
@@ -1720,6 +1738,7 @@
       if (advanced) return;
       advanced = true;
       clearTimeout(guard);
+      skipPlayback = null;
       if (fresh(g) && running) beginRecording();
     }
     playCue("play", function () {
@@ -1728,6 +1747,7 @@
       var url = URL.createObjectURL(blob);
       audioEl.src = url;
       startTimer(duration);
+      skipPlayback = function () { try { audioEl.onended = null; audioEl.pause(); } catch (e) {} advance(); };
       audioEl.onended = function () { audioEl.onended = null; URL.revokeObjectURL(url); advance(); };
       var p = audioEl.play();
       if (p && p.catch) p.catch(function (e) { log("audio.play blocked: " + e); });
@@ -1805,6 +1825,7 @@
     running = false;
     recordArmed = false;
     gen++;               // every pending callback from this session is now dead
+    skipPlayback = null;
     stopAllSources();    // kill ALL playback, not just the newest source
     muteMaster();        // and hard-silence anything that slipped through
     log("session stop");
@@ -2257,7 +2278,7 @@
         try { yours = analyzeSamples(abuf.getChannelData(0), abuf.sampleRate).stats; } catch (e) { log("take analyze failed: " + e); }
         renderShadowCompare(refStats, yours);
         var advanced = false;
-        var adv = function () { if (advanced) return; advanced = true; clearTimeout(guard); shSrcNode = null; if (fresh(g)) advanceShadow(); };
+        var adv = function () { if (advanced) return; advanced = true; clearTimeout(guard); shSrcNode = null; skipPlayback = null; if (fresh(g)) advanceShadow(); };
         var guard = setTimeout(function () { log("shadow playback safety-net"); adv(); }, (abuf.duration + 3) * 1000);
         try {
           var src = audioCtx.createBufferSource();
@@ -2267,6 +2288,7 @@
           src.start();
           shSrcNode = src;
           trackSource(src);
+          skipPlayback = function () { try { src.onended = null; src.stop(); } catch (e) {} adv(); };
           startTimer(Math.max(1, Math.round(abuf.duration)));
         } catch (e) { log("shadow take play failed: " + e); adv(); }
       }, function (e) { log("shadow take decode failed: " + e); if (fresh(g)) shAfter(300, advanceShadow); });
@@ -2355,6 +2377,7 @@
     shTimers = [];
     shRunning = false;
     shChunkActive = false;
+    skipPlayback = null;
     stopAllSources();
     shRefCollect = null;
     if (shWatch) { clearInterval(shWatch); shWatch = null; }
@@ -2417,6 +2440,8 @@
   idbLoadShadow();   // restore the last reference file, if one was saved
 
   els.startBtn.onclick = function () { running ? stop() : start(); };
+  els.skipBtn.onclick = function () { if (skipPlayback) { log("skip → record now"); skipPlayback(); } };
+  els.shSkipBtn.onclick = function () { if (skipPlayback) { log("skip → next chunk"); skipPlayback(); } };
   els.baselineBtn.onclick = setBaselineFromLastTake;
 
   els.presets.addEventListener("click", function (e) {
