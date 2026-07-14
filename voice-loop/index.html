@@ -72,7 +72,7 @@
     font-weight: 800;
     letter-spacing: 0.8px;
     color: #1a1526;
-    background: #f5f5f5;   /* v15 */
+    background: #ffb3e6;   /* v16 */
   }
 
   /* --- tab bar --- */
@@ -92,8 +92,8 @@
   }
   .tabs button {
     flex: 1;
-    padding: 10px 0;
-    font-size: 13px;
+    padding: 9px 0;
+    font-size: 12px;
     font-weight: 700;
     font-family: inherit;
     color: var(--muted);
@@ -460,12 +460,13 @@
   <header>
     <h1>Voice Loop</h1>
     <p>Hands-free voice practice — pitch · resonance · weight</p>
-    <div class="version" id="version">v15</div>
+    <div class="version" id="version">v16</div>
   </header>
 
   <nav class="tabs" id="tabs">
     <button data-tab="practice" class="active">Practice</button>
     <button data-tab="shadow">Shadow</button>
+    <button data-tab="graph">Graph</button>
     <button data-tab="warmup">Warm-up</button>
     <button data-tab="settings">Settings</button>
   </nav>
@@ -546,6 +547,19 @@
         <div class="take-note">Speak along with her, then hear yourself back — the next chunk starts on its own. Matching her pitch and R1 is the drill. Chunk length follows the Segment length setting.</div>
       </div>
       <div class="note"><b>Headphones required</b> — through speakers, her voice records into your take.</div>
+    </section>
+
+    <!-- ============ GRAPH (live her-vs-you traces while shadowing) ============ -->
+    <section id="secGraph" hidden>
+      <div class="card">
+        <div class="card-head">Pitch — <span style="color:var(--play)">her</span> vs <span style="color:var(--res)">you</span></div>
+        <canvas id="gPitch" class="take-trace" width="320" height="110"></canvas>
+      </div>
+      <div class="card">
+        <div class="card-head">Resonance R1 — <span style="color:var(--play)">her</span> vs <span style="color:var(--res)">you</span></div>
+        <canvas id="gRes" class="take-trace" width="320" height="110"></canvas>
+      </div>
+      <div class="note">Draws live while you shadow — <b>her</b> in aqua, <b>you</b> in gold, on the same clock, so matching her means your line sitting on hers. The last chunk stays up through listen-back. Green shading: your target pitch band (top) and baseline&nbsp;+10–20% resonance zone (bottom, once a baseline is set).</div>
     </section>
 
     <!-- ============ WARM-UP ============ -->
@@ -742,6 +756,9 @@
   var refAnalyser = null, refBuf = null;
   var shRefCollect = null;        // her live samples during the current chunk
   var shHerFHist = [], shHerRHist = [];   // smoothing for her live readout
+  var shTraceHer = [], shTraceYou = [];   // {t,f,r1} per tick — the Graph tab
+  var shTraceT0 = 0;                      // chunk start (ms) for the trace clock
+  var shTraceDur = 10;                    // seconds spanned by the graph x-axis
   var shTimers = [];
   var shAudio = new Audio();
   shAudio.setAttribute("playsinline", "");
@@ -1080,8 +1097,11 @@
     tabs: document.getElementById("tabs"),
     secPractice: document.getElementById("secPractice"),
     secShadow: document.getElementById("secShadow"),
+    secGraph: document.getElementById("secGraph"),
     secWarmup: document.getElementById("secWarmup"),
     secSettings: document.getElementById("secSettings"),
+    gPitch: document.getElementById("gPitch"),
+    gRes: document.getElementById("gRes"),
     shSource: document.getElementById("shSource"),
     shFileRow: document.getElementById("shFileRow"),
     shTtsRow: document.getElementById("shTtsRow"),
@@ -1121,8 +1141,10 @@
     var t = btn.getAttribute("data-tab");
     els.secPractice.hidden = t !== "practice";
     els.secShadow.hidden = t !== "shadow";
+    els.secGraph.hidden = t !== "graph";
     els.secWarmup.hidden = t !== "warmup";
     els.secSettings.hidden = t !== "settings";
+    if (t === "graph") drawShadowGraphs();
   });
 
   function notePractice(msg, warn) {
@@ -1261,6 +1283,11 @@
       } else if (!shHerFHist.length) {
         els.shLiveHer.innerHTML = "<span style=\"opacity:.55\">Her: — listening —</span>";
       }
+      // Graph tab traces: both voices on the same clock, one point per tick
+      var gt = (now - shTraceT0) / 1000;
+      shTraceHer.push({ t: gt, f: rf, r1: rr1 });
+      shTraceYou.push({ t: gt, f: f, r1: r1 });
+      if (!els.secGraph.hidden) drawShadowGraphs();
     }
     updateLive(f, r1, w);
   }
@@ -2137,6 +2164,9 @@
       shRefCollect = [];
       shHerFHist = []; shHerRHist = [];
       els.shLiveHer.innerHTML = "<span style=\"opacity:.55\">Her: — listening —</span>";
+      shTraceHer = []; shTraceYou = [];
+      shTraceT0 = (window.performance && performance.now) ? performance.now() : Date.now();
+      shTraceDur = len;
       shChunkActive = true;
       var chunkEnd = shPos + len;
       try { shAudio.currentTime = shPos; } catch (e) { log("seek failed: " + e); }
@@ -2169,6 +2199,7 @@
     try { shAudio.pause(); } catch (e) {}
     if (shGainNode) shGainNode.gain.value = 0;
     els.shLiveHer.textContent = "";
+    drawShadowGraphs();           // final render, kept up through listen-back
     shAfter(400, stopRecorder);   // small tail so you can finish your phrase
   }
 
@@ -2279,6 +2310,43 @@
       log("shadow chunk: her " + Math.round(her.mean) + "Hz/R1 " + (her.r1Med ? Math.round(her.r1Med) : "?") +
           " vs you " + Math.round(you.mean) + "Hz/R1 " + (you.r1Med ? Math.round(you.r1Med) : "?"));
     }
+  }
+
+  // --- Graph tab: her (aqua) and you (gold) traces on a shared time axis ---
+  function drawDualTrace(cv, useR1) {
+    var ctx = cv.getContext("2d"), W = cv.width, H = cv.height;
+    var scale = useR1 ? resToPct : pitchToPct;
+    ctx.clearRect(0, 0, W, H);
+    // shaded goal zone: target pitch band, or baseline+10–20% R1 zone
+    var zLo = null, zHi = null;
+    if (!useR1) { zLo = targetLow; zHi = targetHigh; }
+    else if (baseline && baseline.r1) { zLo = baseline.r1 * 1.10; zHi = baseline.r1 * 1.20; }
+    if (zLo) {
+      var yHi = (1 - scale(zHi)) * H, yLo = (1 - scale(zLo)) * H;
+      ctx.fillStyle = "rgba(126,242,155,.13)";
+      ctx.fillRect(0, yHi, W, yLo - yHi);
+    }
+    function plot(arr, color) {
+      ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.lineJoin = "round";
+      ctx.beginPath();
+      var pen = false;
+      for (var i = 0; i < arr.length; i++) {
+        var v = useR1 ? arr[i].r1 : arr[i].f;
+        if (v == null) { pen = false; continue; }
+        var x = Math.min(1, arr[i].t / (shTraceDur || 10)) * W;
+        var y = (1 - scale(v)) * H;
+        if (!pen) { ctx.moveTo(x, y); pen = true; } else ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+    }
+    plot(shTraceHer, "#7fe3d0");
+    plot(shTraceYou, "#ffd27a");
+  }
+  function drawShadowGraphs() {
+    try {
+      drawDualTrace(els.gPitch, false);
+      drawDualTrace(els.gRes, true);
+    } catch (e) { log("graph draw failed: " + e); }
   }
 
   function endShadow(msg) {
@@ -2450,7 +2518,8 @@
 
   // Analysis internals, exposed for automated testing only.
   window.__vl = { lastStats: null, detectPitch: detectPitch, estimateR1: estimateR1, h1h2: h1h2, downsample: downsample, analyzeSamples: analyzeSamples,
-                  shadowInfo: function () { return shBlob ? { dur: shDur, size: shBlob.size } : null; } };
+                  shadowInfo: function () { return shBlob ? { dur: shDur, size: shBlob.size } : null; },
+                  graphInfo: function () { return { her: shTraceHer.length, you: shTraceYou.length }; } };
 
   // graceful message if the browser can't record
   if (!navigator.mediaDevices || typeof MediaRecorder === "undefined") {
