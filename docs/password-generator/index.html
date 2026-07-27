@@ -171,7 +171,7 @@ input[type=number] {
 
   <div class="wordmark">
     <h1>Memorable Password Generator</h1>
-    <p>Real words from categories you pick, with letters swapped for lookalike numbers and symbols &mdash; <span style="font-family:var(--mono);color:var(--amber)">w33k3nd</span> &mdash; so it stays rememberable but still satisfies the usual length, number, symbol and capital rules.</p>
+    <p>Words that play roles in a tiny scene &mdash; <span style="font-family:var(--mono);color:var(--amber)">bobbin-Stitches-denim</span> &mdash; drawn from themes you care about, with letters swapped for lookalike numbers and symbols. A story you can picture, that still satisfies the usual length, number, symbol and capital rules.</p>
   </div>
 
   <div class="card">
@@ -207,6 +207,17 @@ input[type=number] {
   <div class="card">
     <div class="card-head">Style</div>
     <div class="ctrl-body">
+      <button class="switch active" id="sw-story" data-opt="story">
+        <span>Story mode<span class="sw-sub">Words play roles in a tiny scene &mdash; otter-steals-saffron &mdash; instead of being unrelated</span></span>
+        <span class="track"></span>
+      </button>
+      <div class="row" id="row-storymode">
+        <div class="label"><b>Story words come from</b></div>
+        <div class="seg" id="seg-story">
+          <button data-story="themed" class="active">One theme</button>
+          <button data-story="anything">Anything goes</button>
+        </div>
+      </div>
       <div class="row">
         <div class="label"><b>Words per password</b><span class="val" id="lbl-words">2 words</span></div>
         <input type="range" id="in-words" min="1" max="4" value="2" step="1">
@@ -233,7 +244,7 @@ input[type=number] {
   </div>
 
   <div class="card">
-    <div class="card-head">Word categories</div>
+    <div class="card-head">Themes</div>
     <div class="ctrl-body">
       <div class="chip-grid" id="chip-grid"></div>
       <div class="pool-line" id="pool-line"></div>
@@ -262,6 +273,9 @@ input[type=number] {
 // ════════════════════════════════════════════════════════════════
 //  WORD CATEGORIES
 // ════════════════════════════════════════════════════════════════
+// Each theme carries a noun bank (`words`, also used by classic mode) plus
+// role banks used to build sentences: `actor` heads the scene, `adj`
+// describes it, `verb` is third-person singular.
 const CATEGORIES = {
   weather: { label: 'Weather & sky', on: true, words:
     'monsoon thunder eclipse aurora blizzard twilight cyclone drizzle rainfall snowdrift ' +
@@ -272,7 +286,18 @@ const CATEGORIES = {
     'misty balmy arctic tropic vapour updraft snowfall sunlit starry twinkle moonrise ' +
     'nightfall midnight noonday overcast hailstorm frostbite shadow gusty haze halo ' +
     'skyward cloudy stormy blustery raindrop snowflake sunshower dusk gale windward ' +
-    'muggy sultry frosty thawing hazy sunspot ozone jetstream barometer' },
+    'muggy sultry frosty thawing hazy sunspot ozone jetstream barometer',
+    roles: {
+      actor: 'monsoon thunder cyclone tempest blizzard typhoon hurricane tornado squall ' +
+             'drizzle sunbeam rainbow lightning zephyr mistral downpour heatwave flurry ' +
+             'drought icicle dewdrop thermal daybreak nightfall sunrise',
+      adj:   'stormy wintry foggy misty balmy humid gusty cloudy sunlit starry arctic ' +
+             'tropic muggy sultry frosty hazy blustery overcast glacial searing bitter ' +
+             'crisp gentle restless endless',
+      verb:  'gathers scatters darkens rumbles thunders drizzles howls sweeps drifts ' +
+             'settles breaks clears rolls lashes batters soaks freezes thaws blankets ' +
+             'swirls builds fades looms rises falls'
+    } },
 
   animals: { label: 'Animals', on: true, words:
     'otter falcon badger mantis jaguar heron gecko osprey marten weasel raccoon panther ' +
@@ -284,7 +309,18 @@ const CATEGORIES = {
     'reindeer antelope impala zebra giraffe rhino hippo tortoise terrapin iguana chameleon ' +
     'viper cobra python mamba adder newt toad axolotl beetle cicada firefly cricket locust ' +
     'hornet moth monarch lobster crayfish octopus squid nautilus starfish urchin seahorse ' +
-    'stingray marlin tarpon salmon herring anchovy sardine barracuda' },
+    'stingray marlin tarpon salmon herring anchovy sardine barracuda',
+    roles: {
+      actor: 'otter falcon badger heron gecko osprey weasel raccoon panther cheetah ' +
+             'gazelle walrus dolphin narwhal pelican puffin penguin toucan condor kestrel ' +
+             'magpie sparrow raven bobcat coyote jackal meerkat lemur gibbon baboon',
+      adj:   'hungry restless watchful curious skittish nimble sleepy fearless clever ' +
+             'stubborn quiet swift silent shaggy speckled striped spotted fierce gentle ' +
+             'lanky sturdy scruffy wary bristly sleek',
+      verb:  'stalks circles guards steals prowls hunts chases burrows perches glides ' +
+             'swoops dives climbs forages howls growls sniffs darts leaps basks preens ' +
+             'scurries pounces waits watches'
+    } },
 
   land: { label: 'Landscape & sea', on: true, words:
     'canyon glacier tidepool basalt estuary mesa fjord plateau summit valley gorge ravine ' +
@@ -296,7 +332,18 @@ const CATEGORIES = {
     'brook stream rapids cascade waterfall cataract aquifer icefield iceberg crevasse ' +
     'moraine snowline treeline ridgetop bluff butte badlands arroyo highland lowland ' +
     'flatlands marshland saltflat drylands quarry cavern grotto sinkhole hillock ' +
-    'seabed trench shelfice pinnacle escarp' },
+    'seabed trench shelfice pinnacle escarp',
+    roles: {
+      actor: 'glacier volcano geyser tidepool estuary canyon whirlpool riptide breaker ' +
+             'cascade waterfall boulder crevasse lagoon iceberg avalanche torrent ' +
+             'undertow sandbar headland moraine aquifer cavern quarry summit',
+      adj:   'rocky misty windswept jagged barren shallow briny frozen sunken hidden ' +
+             'craggy tidal marshy mossy steep remote silent wild sheer weathered salted ' +
+             'drifting sunlit shaded vast',
+      verb:  'swallows carves floods erodes splinters churns drains rises crumbles ' +
+             'thaws shifts spills sinks widens narrows freezes cracks buries hides ' +
+             'guards echoes scatters gathers batters swells'
+    } },
 
   food: { label: 'Plants & food', on: true, words:
     'saffron cypress ginger thistle espresso brisket wasabi basil thyme oregano rosemary ' +
@@ -313,7 +360,18 @@ const CATEGORIES = {
     'lemon orange citron kumquat melon currant redwood willow maple birch aspen alder ' +
     'poplar cedar spruce hemlock magnolia dogwood sycamore acacia baobab bamboo lichen ' +
     'clover heather bracken nettle marigold daisy tulip orchid peony lilac violet azalea ' +
-    'camellia gardenia hyacinth wisteria foxglove primrose bluebell' },
+    'camellia gardenia hyacinth wisteria foxglove primrose bluebell',
+    roles: {
+      actor: 'mushroom thistle nettle clover heather bracken foxglove marigold dogwood ' +
+             'magnolia sycamore juniper cypress redwood willow acacia baobab bamboo ' +
+             'orchid azalea camellia gardenia wisteria primrose bluebell',
+      adj:   'bitter savoury smoky buttery ripe tender fragrant zesty salted spiced ' +
+             'sour roasted candied charred golden crusty juicy wilted dried tangy ' +
+             'peppery earthy sweetened bruised leafy',
+      verb:  'ripens blooms wilts sprouts blossoms withers spreads climbs shades ' +
+             'scatters tangles droops ferments simmers steeps sweetens crumbles melts ' +
+             'browns burns seeds shelters twines curls opens'
+    } },
 
   travel: { label: 'Travel & cities', on: true, words:
     'harbour bazaar terrace transit riviera airport terminal passport luggage suitcase ' +
@@ -330,7 +388,18 @@ const CATEGORIES = {
     'tangier cairo luxor amman petra beirut istanbul ankara izmir tbilisi yerevan ' +
     'tashkent samarkand delhi jaipur udaipur kerala colombo pokhara lhasa hanoi saigon ' +
     'danang bangkok penang malacca borneo lombok jakarta manila taipei busan sapporo ' +
-    'nagano kanazawa okinawa perth hobart darwin cairns auckland dunedin tonga samoa' },
+    'nagano kanazawa okinawa perth hobart darwin cairns auckland dunedin tonga samoa',
+    roles: {
+      actor: 'traveler wanderer pilgrim tourist stranger nomad captain sailor porter ' +
+             'driver gondola rickshaw caravan carriage tramway railcar ferryboat ' +
+             'harbour hostel taverna market bazaar skyline courier guide',
+      adj:   'distant crowded ancient winding lively sleepy dusty sunlit narrow hidden ' +
+             'bustling faded remote coastal walled quiet gilded weary humid seaside ' +
+             'cobbled sunbaked restless timeless salty',
+      verb:  'departs arrives wanders drifts crosses boards misses explores lingers ' +
+             'returns detours strolls climbs sails roams escapes hurries queues checks ' +
+             'circles gathers waits chases follows leaves'
+    } },
 
   moods: { label: 'Moods & abstract', on: true, words:
     'weekend velvet mellow chaos static drifting silent solace serene tranquil restless ' +
@@ -343,65 +412,107 @@ const CATEGORIES = {
     'resolute valiant daring reckless careless mindful pensive brooding moody tender ' +
     'warmth comfort plush satin silken smooth rugged rustic polished gleaming glimmer ' +
     'shimmer sparkle glowing fading waning waxing rising soaring floating swirling ' +
-    'twirling tangled woven knotted frayed idle nostalgia kindred solitude serenity' },
+    'twirling tangled woven knotted frayed idle nostalgia kindred solitude serenity',
+    roles: {
+      actor: 'whisper shadow silence reverie daydream slumber longing solitude comfort ' +
+             'warmth sparkle glimmer shimmer nostalgia kindred quiet chaos memory ' +
+             'secret rumour feeling stillness dusk hush wonder',
+      adj:   'silent restless wistful somber jubilant radiant luminous shadowy hushed ' +
+             'fleeting timeless eternal gentle fierce ardent humble frantic giddy ' +
+             'elated gloomy sullen aimless languid curious clever',
+      verb:  'lingers fades drifts settles deepens softens swells stirs glows shimmers ' +
+             'whispers haunts soothes unravels tangles quickens slows blooms aches ' +
+             'rises circles gathers returns steadies wanders'
+    } },
 
-  music: { label: 'Music & sound', on: false, words:
-    'bassline reverb tremolo vinyl cadence timbre encore melody harmony rhythm tempo ' +
-    'chorus refrain bridge verse ballad anthem sonata concerto symphony overture prelude ' +
-    'nocturne serenade rhapsody etude fugue octave chord arpeggio staccato legato vibrato ' +
-    'crescendo baritone soprano tenor falsetto unison chorale bassoon clarinet trumpet ' +
-    'trombone cornet piccolo oboe fiddle banjo mandolin ukulele guitar bassist drummer ' +
-    'cymbal snare timpani marimba xylophone kalimba theremin synth sampler looper mixtape ' +
-    'playlist earworm groove riff hook breakbeat dubstep techno ambient reggae calypso ' +
-    'mambo salsa bolero flamenco tango gospel blues bebop swing motown busker soundwave' },
+  tennis: { label: 'Tennis', on: true, words:
+    'deuce baseline dropshot topspin volley racquet advantage backhand forehand slice ' +
+    'rally tiebreak service doubles singles courtside sideline netcord overgrip sweatband ' +
+    'hardcourt umpire linesman setpoint lovegame fault strings tension kickserve ' +
+    'flatserve footwork stance approach passing lobbing poaching baseliner volleyer ' +
+    'ballkid tramline ranking seeding bagel racket gutstring clay grass',
+    roles: {
+      actor: 'baseliner volleyer umpire linesman ballkid partner rival champion lefty ' +
+             'server returner opponent underdog qualifier coach captain hitter slicer ' +
+             'scrambler retriever',
+      adj:   'topspun sliced looping wicked brutal angled heavy tight sweaty gritty ' +
+             'unseeded ranked nervy clutch rusty shallow flatter wristy blistered ' +
+             'punishing',
+      verb:  'serves volleys returns smashes slices rallies lobs aces drills chases ' +
+             'retrieves shanks breaks holds defends attacks scrambles nets clips wins'
+    } },
 
-  sports: { label: 'Sports & motion', on: false, words:
-    'sprint deadlift offside summit paddle freestyle marathon triathlon decathlon hurdles ' +
-    'relay javelin discus shotput sprinter cyclist peloton dribble layup rebound offense ' +
-    'defense goalie striker midfield keeper penalty volley backhand forehand topspin ' +
-    'racquet birdie bogey putter fairway bunker caddie inning bullpen slider curveball ' +
-    'fastball shortstop outfield touchdown fumble tackle scrimmage huddle faceoff ' +
-    'slapshot rally lineout wicket bowler googly boundary regatta kayaking rappel belay ' +
-    'crampon ascent descent traverse trailhead portage snorkel scuba freedive surfing ' +
-    'carving slalom telemark vaulting gymnast tumbling squat burpee jogging skating' },
+  sewing: { label: 'Garment sewing', on: true, words:
+    'bobbin serger selvage notion gusset placket muslin facing fusible pattern toile ' +
+    'basting seamline hemline topstitch grainline armscye bodice sleeve collar lapel ' +
+    'pleat zipper button thread needle shears pinking presser overlock blindhem fabric ' +
+    'cotton linen chiffon organza brocade denim tweed merino jersey drape notches ' +
+    'tailor sewist stitcher bobbins ruffle godet yardage',
+    roles: {
+      actor: 'tailor sewist stitcher cutter presser needle bobbin serger scissors ' +
+             'machine pattern mannequin dressform thimble shears',
+      adj:   'fitted draped basted pinned raglan pleated gathered lined unlined sheer ' +
+             'crisp woven knitted starched frayed tailored sleek supple ruffled bias',
+      verb:  'stitches drapes pleats hems bastes presses gathers cuts trims tucks ' +
+             'sews seams fits frays unpicks threads notches eases clips shirrs'
+    } },
 
-  scifi: { label: 'Sci-fi & myth', on: false, words:
-    'nebula kraken oracle warp phantom obsidian valkyrie griffin dragon wyvern basilisk ' +
-    'chimera cyclops minotaur centaur satyr seraph siren harpy hydra sphinx phoenix ' +
-    'pegasus unicorn kelpie selkie banshee wraith specter goblin gremlin troll ogre ' +
-    'dwarven wizard sorcerer warlock druid shaman paladin ranger knight templar amulet ' +
-    'talisman scepter grimoire scroll rune sigil glyph portal rift realm astral aether ' +
-    'ethereal mystic arcane eldritch spectral cosmic starship android cyborg replicant ' +
-    'mecha blaster stargate wormhole airlock cryosleep outpost frontier galactic mythos' },
+  baking: { label: 'Baking', on: true, words:
+    'banneton levain crumb proofing autolyse ganache laminate scoring starter custard ' +
+    'brioche sourdough focaccia ciabatta baguette pretzel crumpet pastry tartlet galette ' +
+    'meringue macaron flour yeast butter sugar gluten dough batter oven whisk spatula ' +
+    'mixer scraper crust bakery ferment blister hydration poolish biga lievito rolling ' +
+    'kneading shaping',
+    roles: {
+      actor: 'baker levain starter dough yeast oven mixer crust crumb bakery poolish ' +
+             'biga sifter kneader scraper',
+      adj:   'crusty golden airy flaky buttery chewy dense risen sticky glossy burnt ' +
+             'tender fluffy crumbly doughy toasted blistered scorched warm bubbly',
+      verb:  'proofs kneads folds whisks scores glazes tempers bakes rises ferments ' +
+             'rests shapes chills sifts creams melts beats laminates browns cools'
+    } },
 
-  tech: { label: 'Tech & code', on: false, words:
-    'kernel socket cipher cascade buffer daemon sandbox compiler runtime pointer struct ' +
-    'lambda closure recursion mutex thread process handler wrapper decorator iterator ' +
-    'debugger profiler linter syntax token parser lexer bytecode bitmask register cache ' +
-    'pipeline packet router gateway subnet proxy firewall protocol handshake endpoint ' +
-    'webhook cookie session cluster container registry commit branch merge rebase stash ' +
-    'patch refactor bootstrap deploy rollback failover latency bandwidth checksum keypair ' +
-    'keystore nonce hashing encrypt decrypt sidecar monorepo terminal shell script' },
+  pride: { label: 'Pride', on: true, words:
+    'rainbow parade banner glitter sequins lavender kinship anthem confetti festival ' +
+    'placard flagpole streamer balloons family community triangle stripes colours ' +
+    'pronouns queer sapphic lesbian bisexual asexual nonbinary agender enby femme butch ' +
+    'trans aromantic allies pride marches beloved chosen kindred banners ' +
+    'welcome bunting ribbons gathering sunshine',
+    roles: {
+      actor: 'allies elders marchers dancers drummers volunteer stranger crowd family ' +
+             'community friends partners lovers siblings neighbour',
+      adj:   'proud glittery fearless tender beloved joyful fabulous defiant gentle ' +
+             'bright affirming sequinned colourful chosen radiant loud steadfast ' +
+             'buoyant luminous safe',
+      verb:  'marches gathers dances cheers waves sparkles shines protects welcomes ' +
+             'embraces sings shouts blooms thrives belongs affirms uplifts glitters ' +
+             'struts unfurls'
+    } },
 
-  science: { label: 'Science & space', on: false, words:
-    'quantum isotope entropy orbit plasma helix neutron proton electron photon quark ' +
-    'boson lepton fermion nucleus atomic molecule polymer enzyme protein ribosome mitosis ' +
-    'genome allele mutation catalyst reagent solvent alkaline acidic oxide alloy crystal ' +
-    'lattice mineral magnetic voltage circuit resistor capacitor inductor spectrum ' +
-    'infrared frequency amplitude gravity inertia momentum velocity friction pressure ' +
-    'density buoyancy telescope satellite asteroid meteorite galaxy quasar pulsar ' +
-    'supernova redshift parsec lightyear martian jupiter saturn neptune mercury orbiter ' +
-    'rover lander module capsule shuttle thruster gantry apogee perigee' },
+  colours: { label: 'Colours', on: true, words:
+    'scarlet crimson violet amber olive cobalt silver golden bronze copper indigo ' +
+    'magenta fuchsia turquoise teal cyan azure navy ivory beige taupe mauve ochre ' +
+    'sienna umber sepia russet maroon burgundy oxblood claret coral salmon celadon ' +
+    'verdigris emerald jade sage mint forest moss lilac plum cerulean sapphire slate ' +
+    'charcoal graphite pewter platinum blush rose ruby garnet topaz marigold mustard ' +
+    'honey cream oatmilk gunmetal seafoam',
+    roles: {
+      actor: 'pigment swatch palette dyelot inkwell crayon pastel dyebath brush stain ' +
+             'tint shade gradient spectrum prism',
+      adj:   'scarlet crimson violet amber olive cobalt silver golden bronze copper ' +
+             'indigo magenta fuchsia teal azure ivory beige taupe mauve ochre sienna ' +
+             'sepia russet maroon oxblood claret coral celadon emerald slate',
+      verb:  'fades bleeds deepens clashes glows brightens darkens shimmers stains ' +
+             'tints dyes saturates washes blends shifts pales burns sparkles streaks ' +
+             'catches'
+    } }
+};
 
-  tools: { label: 'Tools & machines', on: false, words:
-    'piston anvil turbine ratchet bellows caliper forge hammer chisel mallet wrench ' +
-    'spanner pliers drillbit sander lathe planer jigsaw bandsaw grinder welder rivet ' +
-    'flange gasket bearing gearbox camshaft flywheel clutch throttle manifold radiator ' +
-    'generator dynamo magneto solenoid actuator conveyor pulley winch sprocket chainsaw ' +
-    'toolbox workbench clamp tongs crucible smelter furnace kiln boiler engine motor ' +
-    'rotor stator propeller rudder cockpit fuselage tractor bulldozer excavator backhoe ' +
-    'derrick scaffold trowel spade shovel rake pickaxe machete hatchet cleaver skillet ' +
-    'kettle plumbline sawhorse mandrel' }
+// Used when a theme's own bank is too thin for a slot.
+const FALLBACK = {
+  actor: 'stranger shadow figure creature wanderer'.split(' '),
+  adj:   'silent hidden restless golden quiet'.split(' '),
+  verb:  'finds keeps carries follows guards'.split(' ')
 };
 
 // ════════════════════════════════════════════════════════════════
@@ -446,7 +557,9 @@ function shuffle(arr) {
 // ════════════════════════════════════════════════════════════════
 //  STATE
 // ════════════════════════════════════════════════════════════════
-const STORE_KEY = 'pwgen-settings-v1';
+// v2 added story mode and replaced six themes with five personal ones; a saved
+// v1 payload would leave the new themes switched off, so it is not carried over.
+const STORE_KEY = 'pwgen-settings-v2';
 const BATCH = 8;
 
 const cfg = {
@@ -458,6 +571,8 @@ const cfg = {
   wordCount: 2,
   leet: 60,
   separator: '-',
+  story: true,
+  storyMode: 'themed',
   cats: Object.keys(CATEGORIES).filter(k => CATEGORIES[k].on)
 };
 
@@ -492,6 +607,26 @@ function activePool() {
     for (const w of cat.words.split(' ')) if (w) seen.add(w);
   }
   return Array.from(seen);
+}
+
+// One role bank of one theme. 'noun' is the theme's plain word list, so the
+// nouns in a story are the same words classic mode draws from.
+const bankCache = {};
+function bank(key, role) {
+  const id = key + '.' + role;
+  if (bankCache[id]) return bankCache[id];
+  const cat = CATEGORIES[key];
+  const src = !cat ? '' : role === 'noun' ? cat.words : (cat.roles && cat.roles[role]) || '';
+  const list = src.split(' ').filter(Boolean);
+  bankCache[id] = list.length ? list : (FALLBACK[role] || FALLBACK.actor);
+  return bankCache[id];
+}
+
+// Every enabled theme's bank for one role, concatenated.
+function mergedBank(role) {
+  const out = [];
+  for (const key of cfg.cats) if (CATEGORIES[key]) out.push.apply(out, bank(key, role));
+  return out.length ? out : (FALLBACK[role] || FALLBACK.actor);
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -535,19 +670,45 @@ function capitalise(words) {
   return true;
 }
 
-function generateOne(pool) {
-  // 1. draw distinct words
-  const words = [];
+// Sentence shapes by word count. Where a count has two, one is picked at random.
+const TEMPLATES = {
+  1: [['noun']],
+  2: [['adj', 'actor'], ['actor', 'verb']],
+  3: [['actor', 'verb', 'noun'], ['adj', 'actor', 'verb']],
+  4: [['adj', 'actor', 'verb', 'noun']]
+};
+
+// The words of one password, as plain lowercase strings.
+function drawWords(pool) {
   const used = new Set();
-  for (let i = 0; i < cfg.wordCount; i++) {
+  const take = list => {
     let w = null;
     for (let tries = 0; tries < 40; tries++) {
-      w = pick(pool);
+      w = pick(list);
       if (!used.has(w)) break;
     }
     used.add(w);
-    words.push(w.split(''));
+    return w;
+  };
+
+  // Classic mode: unrelated words straight from the flat pool.
+  if (!cfg.story) {
+    const out = [];
+    for (let i = 0; i < cfg.wordCount; i++) out.push(take(pool));
+    return out;
   }
+
+  // Story mode: fill the roles of a template. Themed keeps every slot inside
+  // one theme so the scene coheres; anything-goes draws each slot from all of
+  // them, which is what makes the pairings surreal.
+  const roles = pick(TEMPLATES[cfg.wordCount] || TEMPLATES[2]);
+  const theme = cfg.storyMode === 'themed' ? pick(cfg.cats) : null;
+  return roles.map(role => take(theme ? bank(theme, role) : mergedBank(role)));
+}
+
+function generateOne(pool) {
+  // 1. draw the words
+  const words = drawWords(pool).map(w => w.split(''));
 
   // 2. capitalise one letter, before substitution runs. Word starts are
   //    preferred; 'i' and 'o' are skipped when confusables are being avoided,
@@ -635,7 +796,7 @@ function decorate(pw) {
 
 function renderBatch() {
   if (!batch.length) {
-    pwBody.innerHTML = '<div class="pw-empty">No words to draw from &mdash; switch on at least one word category below.</div>';
+    pwBody.innerHTML = '<div class="pw-empty">No words to draw from &mdash; switch on at least one theme below.</div>';
     checksEl.innerHTML = '';
     hintEl.hidden = true;
     return;
@@ -689,8 +850,8 @@ function renderChips() {
   ).join('');
   const n = activePool().length;
   poolLine.textContent = n
-    ? n + ' words in the pool. More categories means more variety; fewer means passwords that all feel like yours.'
-    : 'Nothing selected — switch on at least one category.';
+    ? n + ' words in the pool. More themes means more variety; fewer means passwords that all feel like yours.'
+    : 'Nothing selected — switch on at least one theme.';
 }
 
 function renderControls() {
@@ -703,12 +864,18 @@ function renderControls() {
     cfg.leet === 0 ? 'none — plain words' : cfg.leet === 100 ? '100% — every letter' : cfg.leet + '%';
 
   for (const [id, key] of [['sw-numbers', 'useNumbers'], ['sw-symbols', 'useSymbols'],
-                           ['sw-caps', 'useCaps'], ['sw-amb', 'avoidAmbiguous']]) {
+                           ['sw-caps', 'useCaps'], ['sw-amb', 'avoidAmbiguous'],
+                           ['sw-story', 'story']]) {
     document.getElementById(id).classList.toggle('active', cfg[key]);
   }
   for (const b of document.querySelectorAll('#seg-sep button')) {
     b.classList.toggle('active', b.dataset.sep === cfg.separator);
   }
+  for (const b of document.querySelectorAll('#seg-story button')) {
+    b.classList.toggle('active', b.dataset.story === cfg.storyMode);
+  }
+  // The themed / anything-goes choice only means something in story mode.
+  document.getElementById('row-storymode').hidden = !cfg.story;
 }
 
 function regenerate() {
@@ -748,6 +915,9 @@ document.getElementById('in-leet').addEventListener('input', e => {
 
 for (const b of document.querySelectorAll('#seg-sep button')) {
   b.addEventListener('click', () => { cfg.separator = b.dataset.sep; refresh(); });
+}
+for (const b of document.querySelectorAll('#seg-story button')) {
+  b.addEventListener('click', () => { cfg.storyMode = b.dataset.story; refresh(); });
 }
 for (const b of document.querySelectorAll('.switch')) {
   b.addEventListener('click', () => { cfg[b.dataset.opt] = !cfg[b.dataset.opt]; refresh(); });
