@@ -159,6 +159,9 @@ input[type=number] {
   color: var(--text2); font-size: 12.5px; font-family: inherit; cursor: pointer;
 }
 .chip.active { background: var(--teal); color: #06120f; border-color: var(--teal); font-weight: 700; }
+.chip.sub { font-family: var(--mono); font-size: 13px; padding: 0 10px; letter-spacing: .02em; }
+.chip.sub.tier2 { border-style: dashed; }
+.chip.sub .arr { opacity: .55; margin: 0 3px; }
 .pool-line { font-size: 11.5px; color: var(--text2); line-height: 1.6; }
 .pool-line b { color: var(--amber); font-family: var(--mono); font-weight: 400; }
 
@@ -190,11 +193,11 @@ input[type=number] {
         <input type="number" id="in-minlen" value="12" min="4" max="64" step="1">
       </div>
       <button class="switch active" id="sw-numbers" data-opt="useNumbers">
-        <span>Include numbers<span class="sw-sub">Lets letters become digits: e&rarr;3, a&rarr;4, s&rarr;5</span></span>
+        <span>Include numbers<span class="sw-sub">Allows digit swaps and digit filler &mdash; choose which swaps below</span></span>
         <span class="track"></span>
       </button>
       <button class="switch active" id="sw-symbols" data-opt="useSymbols">
-        <span>Include special characters<span class="sw-sub">Lets letters become symbols: a&rarr;@, i&rarr;!, s&rarr;$</span></span>
+        <span>Include special characters<span class="sw-sub">Allows symbol swaps and symbol filler &mdash; choose which swaps below</span></span>
         <span class="track"></span>
       </button>
       <button class="switch active" id="sw-caps" data-opt="useCaps">
@@ -240,6 +243,14 @@ input[type=number] {
         <span>Avoid confusable characters<span class="sw-sub">Never produces 0, 1, capital I or capital O &mdash; so nothing is mistaken for O, l or i</span></span>
         <span class="track"></span>
       </button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-head">Substitutions</div>
+    <div class="ctrl-body">
+      <div class="chip-grid" id="sub-grid"></div>
+      <div class="pool-line" id="sub-line"></div>
     </div>
   </div>
 
@@ -516,17 +527,38 @@ const FALLBACK = {
 };
 
 // ════════════════════════════════════════════════════════════════
-//  SUBSTITUTION MAPS
+//  SUBSTITUTIONS
 // ════════════════════════════════════════════════════════════════
-// Digits a letter can become. '0' and '1' are dropped when the
+// Every swap the app can make, switchable one at a time. Tier 2 swaps are
+// less obvious to read back, so they ship off; turn them on for the policies
+// that demand an odd character. '0' and '1' are dropped when the
 // avoid-confusables switch is on (see subsFor).
-const DIGIT_MAP = {
-  a: ['4'], b: ['8'], e: ['3'], g: ['9'], i: ['1'],
-  l: ['1'], o: ['0'], s: ['5'], t: ['7'], z: ['2']
-};
-const SYMBOL_MAP = {
-  a: ['@'], i: ['!'], s: ['$']
-};
+const SUBS = [
+  { f: 'a', t: '4', digit: true,  tier: 1 },
+  { f: 'a', t: '@', digit: false, tier: 1 },
+  { f: 'b', t: '8', digit: true,  tier: 1 },
+  { f: 'e', t: '3', digit: true,  tier: 1 },
+  { f: 'g', t: '9', digit: true,  tier: 1 },
+  { f: 'i', t: '1', digit: true,  tier: 1 },
+  { f: 'i', t: '!', digit: false, tier: 1 },
+  { f: 'l', t: '1', digit: true,  tier: 1 },
+  { f: 'o', t: '0', digit: true,  tier: 1 },
+  { f: 's', t: '5', digit: true,  tier: 1 },
+  { f: 's', t: '$', digit: false, tier: 1 },
+  { f: 't', t: '7', digit: true,  tier: 1 },
+  { f: 'z', t: '2', digit: true,  tier: 1 },
+  { f: 'b', t: '6', digit: true,  tier: 2 },
+  { f: 'g', t: '6', digit: true,  tier: 2 },
+  { f: 'c', t: '(', digit: false, tier: 2 },
+  { f: 'd', t: ')', digit: false, tier: 2 },
+  { f: 'h', t: '#', digit: false, tier: 2 },
+  { f: 'k', t: '<', digit: false, tier: 2 },
+  { f: 'n', t: '^', digit: false, tier: 2 },
+  { f: 't', t: '+', digit: false, tier: 2 },
+  { f: 'x', t: '%', digit: false, tier: 2 },
+  { f: 'y', t: '?', digit: false, tier: 2 }
+];
+const subId = s => s.f + '>' + s.t;
 const CONFUSABLE = '01IO';
 const DIGITS_ALL  = '0123456789';
 const DIGITS_SAFE = '23456789';
@@ -573,6 +605,7 @@ const cfg = {
   separator: '-',
   story: true,
   storyMode: 'themed',
+  subs: SUBS.filter(s => s.tier === 1).map(subId),
   cats: Object.keys(CATEGORIES).filter(k => CATEGORIES[k].on)
 };
 
@@ -585,6 +618,12 @@ function loadSettings() {
     if (k === 'cats') {
       const keep = saved.cats.filter(c => CATEGORIES[c]);
       if (keep.length) cfg.cats = keep;
+    } else if (k === 'subs') {
+      // May legitimately be empty — switching every swap off means plain words.
+      if (Array.isArray(saved.subs)) {
+        const ids = SUBS.map(subId);
+        cfg.subs = saved.subs.filter(id => ids.indexOf(id) !== -1);
+      }
     } else if (typeof saved[k] === typeof cfg[k]) {
       cfg[k] = saved[k];
     }
@@ -635,14 +674,38 @@ function mergedBank(role) {
 
 // Replacements available for one letter under the current settings.
 function subsFor(ch) {
-  let out = [];
-  if (cfg.useNumbers && DIGIT_MAP[ch]) out = out.concat(DIGIT_MAP[ch]);
-  if (cfg.useSymbols && SYMBOL_MAP[ch]) out = out.concat(SYMBOL_MAP[ch]);
-  if (cfg.avoidAmbiguous) out = out.filter(c => CONFUSABLE.indexOf(c) === -1);
+  const out = [];
+  for (const s of SUBS) {
+    if (s.f !== ch) continue;
+    if (cfg.subs.indexOf(subId(s)) === -1) continue;
+    if (s.digit ? !cfg.useNumbers : !cfg.useSymbols) continue;
+    if (cfg.avoidAmbiguous && CONFUSABLE.indexOf(s.t) !== -1) continue;
+    out.push(s.t);
+  }
   return out;
 }
-function digitPool() { return (cfg.avoidAmbiguous ? DIGITS_SAFE : DIGITS_ALL).split(''); }
-function symbolPool() { return SYMBOLS.split(''); }
+
+// A character you switched off should not sneak back in as filler. Only
+// characters this app can actually produce as a swap count as switched off —
+// symbols like & are never swap targets, so they stay available.
+function bannedChars() {
+  const seen = {};
+  for (const s of SUBS) {
+    if (!(s.t in seen)) seen[s.t] = false;
+    if (cfg.subs.indexOf(subId(s)) !== -1) seen[s.t] = true;
+  }
+  return Object.keys(seen).filter(t => !seen[t]).join('');
+}
+
+// Filler pools, minus anything switched off — but never empty, since the
+// length requirement has to be satisfiable.
+function trimmed(chars) {
+  const banned = bannedChars();
+  const kept = chars.split('').filter(c => banned.indexOf(c) === -1);
+  return kept.length ? kept : chars.split('');
+}
+function digitPool() { return trimmed(cfg.avoidAmbiguous ? DIGITS_SAFE : DIGITS_ALL); }
+function symbolPool() { return trimmed(SYMBOLS); }
 
 function separatorFor() {
   if (cfg.separator === 'none') return '';
@@ -854,6 +917,30 @@ function renderChips() {
     : 'Nothing selected — switch on at least one theme.';
 }
 
+function renderSubs() {
+  const esc = c => c.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  document.getElementById('sub-grid').innerHTML = SUBS.map(s => {
+    const on = cfg.subs.indexOf(subId(s)) !== -1;
+    return '<button class="chip sub' + (s.tier === 2 ? ' tier2' : '') + (on ? ' active' : '') +
+           '" data-sub="' + subId(s) + '">' +
+           s.f + '<span class="arr">&rarr;</span>' + esc(s.t) + '</button>';
+  }).join('');
+
+  // Only call out characters you actively switched off. The tier 2 set is
+  // unreachable by default, and listing all of it every time is just noise.
+  const banned = bannedChars();
+  const tier1 = SUBS.filter(s => s.tier === 1).map(s => s.t);
+  const dropped = banned.split('').filter(c => tier1.indexOf(c) !== -1);
+
+  let line = cfg.subs.length
+    ? 'Dashed chips are the less obvious swaps, off unless you need them.'
+    : 'Every swap is off, so words stay plain — numbers and symbols can still be appended to meet the length and character rules.';
+  if (dropped.length) {
+    line += ' Never appears anywhere, filler included: ' + dropped.join(' ') + '.';
+  }
+  document.getElementById('sub-line').textContent = line;
+}
+
 function renderControls() {
   document.getElementById('in-minlen').value = cfg.minLength;
   document.getElementById('lbl-minlen').textContent = cfg.minLength + ' characters';
@@ -885,6 +972,7 @@ function regenerate() {
 function refresh() {
   renderControls();
   renderChips();
+  renderSubs();
   saveSettings();
   regenerate();
 }
@@ -922,6 +1010,15 @@ for (const b of document.querySelectorAll('#seg-story button')) {
 for (const b of document.querySelectorAll('.switch')) {
   b.addEventListener('click', () => { cfg[b.dataset.opt] = !cfg[b.dataset.opt]; refresh(); });
 }
+
+document.getElementById('sub-grid').addEventListener('click', e => {
+  const chip = e.target.closest('.chip');
+  if (!chip) return;
+  const id = chip.dataset.sub;
+  const i = cfg.subs.indexOf(id);
+  if (i === -1) cfg.subs.push(id); else cfg.subs.splice(i, 1);
+  refresh();
+});
 
 document.getElementById('chip-grid').addEventListener('click', e => {
   const chip = e.target.closest('.chip');
