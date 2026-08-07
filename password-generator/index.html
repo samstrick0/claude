@@ -72,11 +72,13 @@ input[type=range]::-moz-range-thumb {
   width: 18px; height: 18px; border-radius: 50%; background: var(--teal);
   cursor: pointer; border: 2px solid var(--s1);
 }
-input[type=number] {
+input[type=number], input[type=text] {
   background: var(--s2); border: 1px solid var(--border); color: var(--text);
   border-radius: 8px; padding: 9px 10px; font-size: 14px; font-family: inherit;
   min-height: 40px; width: 100%;
 }
+input[type=text] { font-family: var(--mono); font-size: 15px; }
+input[type=text]::placeholder { color: var(--text2); }
 
 .seg { display: flex; border: 1px solid var(--border); border-radius: 9px; overflow: hidden; }
 .seg button {
@@ -174,7 +176,7 @@ input[type=number] {
 
   <div class="wordmark">
     <h1>Memorable Password Generator</h1>
-    <p>Words that play roles in a tiny scene &mdash; <span style="font-family:var(--mono);color:var(--amber)">bobbin-Stitches-denim</span> &mdash; drawn from themes you care about, with letters swapped for lookalike numbers and symbols. A story you can picture, that still satisfies the usual length, number, symbol and capital rules.</p>
+    <p>Words that play roles in a tiny scene &mdash; <span style="font-family:var(--mono);color:var(--amber)">bobbin-Stitches-denim</span> &mdash; drawn from themes you care about, with letters swapped for lookalike numbers and symbols. A story you can picture, that still satisfies the usual length, number, symbol and capital rules. Or bring a word of your own and have it reshaped to fit.</p>
   </div>
 
   <div class="card">
@@ -183,6 +185,21 @@ input[type=number] {
     <div class="pw-hint" id="pw-hint" hidden></div>
     <div class="checks" id="checks"></div>
     <button class="gen-btn" id="btn-gen">Generate new set</button>
+  </div>
+
+  <div class="card">
+    <div class="card-head">Fix a password of your own</div>
+    <div class="ctrl-body">
+      <div class="row">
+        <div class="label"><b>Your word or phrase</b></div>
+        <input type="text" id="in-own" maxlength="64" placeholder="weekend beach"
+               autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false">
+      </div>
+      <div class="pool-line" id="own-line"></div>
+    </div>
+    <div class="pw-body" id="own-body"></div>
+    <div class="checks" id="own-checks"></div>
+    <button class="gen-btn" id="btn-own">Reshape</button>
   </div>
 
   <div class="card">
@@ -268,7 +285,8 @@ input[type=number] {
       Words are drawn with <code>crypto.getRandomValues</code>, never <code>Math.random</code>,
       and nothing leaves this page &mdash; there is no network request, no analytics and no storage
       of generated passwords. Your settings (not your passwords) are kept in this browser's
-      local storage so the page opens configured the way you left it.
+      local storage so the page opens configured the way you left it &mdash; and anything you
+      type into <em>Fix a password of your own</em> stays in the page, never stored, never sent.
       <br><br>
       Substitutions are predictable to an attacker, so they add far less strength than they look
       like they do. The real strength here comes from word count and length: prefer three or four
@@ -562,6 +580,7 @@ const subId = s => s.f + '>' + s.t;
 const CONFUSABLE = '01IO';
 const DIGITS_ALL  = '0123456789';
 const DIGITS_SAFE = '23456789';
+const LOWERS      = 'abcdefghijklmnopqrstuvwxyz'.split('');
 const SYMBOLS     = '!@#$%&*?+=';
 
 // ════════════════════════════════════════════════════════════════
@@ -839,22 +858,129 @@ function generateBatch() {
 }
 
 // ════════════════════════════════════════════════════════════════
+//  REFIT — reshape a password you already have
+// ════════════════════════════════════════════════════════════════
+// The same steps as generation, applied to your own text instead of drawn
+// words. Nothing you typed is ever removed: letters are swapped in place and
+// characters are appended, so the word you wanted to remember survives.
+const OWN_VARIANTS = 3;
+
+function refitOne(text) {
+  const sep = separatorFor();
+  const src = text.trim().replace(/\s+/g, sep);
+  const out = [];
+  for (const ch of src) out.push({ c: ch, hit: false });
+  if (!out.length) return null;
+  const str = () => out.map(o => o.c).join('');
+
+  // 1. capitalise one letter if you have not already, preferring a word start.
+  //    This runs before substitution, as in generation: subsFor only matches
+  //    lowercase, so the capital is safe from being swapped away afterwards.
+  if (cfg.useCaps && !/[A-Z]/.test(str())) {
+    const starts = [], rest = [];
+    for (let i = 0; i < out.length; i++) {
+      if (!capSafe(out[i].c)) continue;
+      (i === 0 || !/[A-Za-z]/.test(out[i - 1].c) ? starts : rest).push(i);
+    }
+    const from = starts.length ? starts : rest;
+    if (from.length) {
+      const i = pick(from);
+      out[i].c = out[i].c.toUpperCase();
+      out[i].hit = true;
+    }
+  }
+
+  // 2. substitute a share of the eligible letters, chosen across the whole text
+  const slots = [];
+  for (let i = 0; i < out.length; i++) {
+    const opts = subsFor(out[i].c);
+    if (opts.length) slots.push({ i: i, opts: opts });
+  }
+  shuffle(slots);
+  const nSubs = Math.round((cfg.leet / 100) * slots.length);
+  const applied = [];
+  for (let k = 0; k < nSubs; k++) {
+    const s = slots[k];
+    s.was = out[s.i].c;
+    out[s.i].c = pick(s.opts);
+    out[s.i].hit = true;
+    applied.push(s);
+  }
+  // Same guard as generation: something has to stay lowercase.
+  const hasLower = () => out.some(o => /[a-z]/.test(o.c));
+  for (let k = applied.length - 1; k >= 0 && !hasLower(); k--) {
+    out[applied[k].i].c = applied[k].was;
+    out[applied[k].i].hit = false;
+  }
+
+  // 3. required character classes, then length
+  const push = ch => out.push({ c: ch, hit: true });
+  // Nothing typed is ever deleted, so a phrase with no lowercase at all —
+  // 'HELLO', '2024' — can only be given one by appending.
+  if (!hasLower()) push(pick(LOWERS));
+  if (cfg.useNumbers && !/[0-9]/.test(str())) push(pick(digitPool()));
+  if (cfg.useSymbols && !/[^A-Za-z0-9]/.test(str())) push(pick(symbolPool()));
+  let guard = 0;
+  while (out.length < cfg.minLength && guard++ < 96) {
+    if (cfg.useNumbers) push(pick(digitPool()));
+    else if (cfg.useSymbols) push(pick(symbolPool()));
+    else {
+      const pool = activePool();
+      if (sep) push(sep);
+      for (const ch of (pool.length ? pick(pool) : 'weekend')) push(ch);
+    }
+  }
+  return { pw: str(), marks: out.map(o => o.hit) };
+}
+
+// Distinct reshapings of the same input. At a low substitution level several
+// come out identical, so near-duplicates are dropped rather than padded out.
+function refitBatch(text) {
+  const out = [], seen = new Set();
+  if (!text.trim()) return out;
+  for (let i = 0; i < OWN_VARIANTS * 3 && out.length < OWN_VARIANTS; i++) {
+    const r = refitOne(text);
+    if (!r || seen.has(r.pw)) continue;
+    seen.add(r.pw);
+    out.push(r);
+  }
+  return out;
+}
+
+// ════════════════════════════════════════════════════════════════
 //  RENDER
 // ════════════════════════════════════════════════════════════════
 const pwBody   = document.getElementById('pw-body');
 const checksEl = document.getElementById('checks');
 const hintEl   = document.getElementById('pw-hint');
 const poolLine = document.getElementById('pool-line');
+const ownInput  = document.getElementById('in-own');
+const ownBody   = document.getElementById('own-body');
+const ownChecks = document.getElementById('own-checks');
 let batch = [];
+let ownBatch = [];
 
-// Highlight the non-letters so the substitutions are easy to read back.
-function decorate(pw) {
+const escHTML = ch => ch.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+// Highlight the non-letters so the substitutions are easy to read back. With a
+// `marks` array — the refit card — highlight whatever the page touched instead,
+// so what is yours and what was added are told apart at a glance.
+function decorate(pw, marks) {
   let html = '';
-  for (const ch of pw) {
-    const esc = ch.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    html += /[A-Za-z]/.test(ch) ? esc : '<span class="lit">' + esc + '</span>';
+  for (let i = 0; i < pw.length; i++) {
+    const lit = marks ? marks[i] : !/[A-Za-z]/.test(pw[i]);
+    html += lit ? '<span class="lit">' + escHTML(pw[i]) + '</span>' : escHTML(pw[i]);
   }
   return html;
+}
+
+function rowsHTML(list) {
+  return list.map((c, i) =>
+    '<button class="pw-row" data-i="' + i + '">' +
+      '<span class="pw-text">' + decorate(c.pw, c.marks) + '</span>' +
+      '<span class="pw-meta">' + c.pw.length + '</span>' +
+    '</button>'
+  ).join('');
 }
 
 function renderBatch() {
@@ -864,14 +990,9 @@ function renderBatch() {
     hintEl.hidden = true;
     return;
   }
-  pwBody.innerHTML = batch.map((c, i) =>
-    '<button class="pw-row" data-i="' + i + '">' +
-      '<span class="pw-text">' + decorate(c.pw) + '</span>' +
-      '<span class="pw-meta">' + c.pw.length + '</span>' +
-    '</button>'
-  ).join('');
+  pwBody.innerHTML = rowsHTML(batch);
   renderHint();
-  renderChecks();
+  checksEl.innerHTML = checksHTML(batch.map(c => c.pw), cfg.avoidAmbiguous);
 }
 
 // A long run of filler digits is not memorable — say so rather than quietly
@@ -886,8 +1007,10 @@ function renderHint() {
     (cfg.wordCount + 1) + ' words instead.';
 }
 
-function renderChecks() {
-  const all = f => batch.every(c => f(c.pw));
+// The confusable row is skipped on the refit card: a 0 or an I you typed
+// yourself is yours to keep, so failing you for it would be wrong.
+function checksHTML(pws, ambiguous) {
+  const all = f => pws.length > 0 && pws.every(f);
   const items = [
     { label: '≥ ' + cfg.minLength + ' chars', ok: all(p => p.length >= cfg.minLength) }
   ];
@@ -895,14 +1018,26 @@ function renderChecks() {
   if (cfg.useSymbols) items.push({ label: 'symbol', ok: all(p => /[^A-Za-z0-9]/.test(p)) });
   if (cfg.useCaps)    items.push({ label: 'capital', ok: all(p => /[A-Z]/.test(p)) });
   items.push({ label: 'lowercase', ok: all(p => /[a-z]/.test(p)) });
-  if (cfg.avoidAmbiguous) {
-    items.push({ label: 'no 0/1/I/O', ok: all(p => !/[01IO]/.test(p)) });
-  }
-  checksEl.innerHTML = items.map(it =>
+  if (ambiguous) items.push({ label: 'no 0/1/I/O', ok: all(p => !/[01IO]/.test(p)) });
+  return items.map(it =>
     '<span class="check ' + (it.ok ? 'ok' : 'bad') + '">' +
       '<span class="mark">' + (it.ok ? '✓' : '✗') + '</span> ' + it.label +
     '</span>'
   ).join('');
+}
+
+function renderOwn() {
+  ownBatch = refitBatch(ownInput.value);
+  if (!ownBatch.length) {
+    ownBody.innerHTML = '<div class="pw-empty">Type a word or phrase above and it will be reshaped to fit the rules you set below.</div>';
+    ownChecks.innerHTML = '';
+  } else {
+    ownBody.innerHTML = rowsHTML(ownBatch);
+    ownChecks.innerHTML = checksHTML(ownBatch.map(c => c.pw), false);
+  }
+  document.getElementById('own-line').textContent =
+    'Highlighted characters are the ones this page swapped or added — everything else is exactly what you typed. ' +
+    'What you type here is never saved or sent anywhere.';
 }
 
 function renderChips() {
@@ -975,6 +1110,7 @@ function refresh() {
   renderSubs();
   saveSettings();
   regenerate();
+  renderOwn();
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -989,6 +1125,7 @@ document.getElementById('in-minlen').addEventListener('input', e => {
   document.getElementById('lbl-minlen').textContent = cfg.minLength + ' characters';
   saveSettings();
   regenerate();
+  renderOwn();
 });
 document.getElementById('in-minlen').addEventListener('blur', () => renderControls());
 
@@ -1029,22 +1166,30 @@ document.getElementById('chip-grid').addEventListener('click', e => {
   refresh();
 });
 
+document.getElementById('btn-own').addEventListener('click', renderOwn);
+ownInput.addEventListener('input', renderOwn);
+
 // Tap a password to copy it.
-pwBody.addEventListener('click', e => {
-  const row = e.target.closest('.pw-row');
-  if (!row) return;
-  const pw = batch[parseInt(row.dataset.i, 10)].pw;
-  copyText(pw).then(ok => {
-    const meta = row.querySelector('.pw-meta');
-    if (!ok) { meta.textContent = 'copy failed'; return; }
-    row.classList.add('copied');
-    meta.textContent = 'copied';
-    setTimeout(() => {
-      row.classList.remove('copied');
-      meta.textContent = String(pw.length);
-    }, 1200);
+function wireCopy(el, list) {
+  el.addEventListener('click', e => {
+    const row = e.target.closest('.pw-row');
+    if (!row) return;
+    const entry = list()[parseInt(row.dataset.i, 10)];
+    if (!entry) return;
+    copyText(entry.pw).then(ok => {
+      const meta = row.querySelector('.pw-meta');
+      if (!ok) { meta.textContent = 'copy failed'; return; }
+      row.classList.add('copied');
+      meta.textContent = 'copied';
+      setTimeout(() => {
+        row.classList.remove('copied');
+        meta.textContent = String(entry.pw.length);
+      }, 1200);
+    });
   });
-});
+}
+wireCopy(pwBody, () => batch);
+wireCopy(ownBody, () => ownBatch);
 
 function copyText(text) {
   if (navigator.clipboard && window.isSecureContext) {
